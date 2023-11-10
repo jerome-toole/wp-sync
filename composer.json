@@ -1,0 +1,18 @@
+{
+    "name": "jerometoole/wp-sync",
+    "autoload": {
+        "psr-4": {
+            "WpSync\\": "src/"
+        },
+        "files": [ "command.php" ]
+    },
+    "authors": [
+        {
+            "name": "Jerome Toole",
+            "email": "jerometoole@gmail.com"
+        }
+    ],
+    "require": {
+        "wp-cli/mustangostang-spyc": "^0.6.3"
+    }
+}
