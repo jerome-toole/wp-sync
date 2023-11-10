@@ -1,4 +1,4 @@
-# WP Sync WP-CLI Package
+# WP Sync: Simple WordPress migrations from the command line
 
 ## Overview
 
