@@ -1,5 +1,10 @@
 {
     "name": "jerometoole/wp-sync",
+    "description": "Simple CLI migrations between WordPress environments",
+	"type": "wp-cli-package",
+    "homepage": "https://github.com/jerome-toole/wp-sync",
+    "license": "MIT",
+    "version": "0.9.0",
     "autoload": {
         "psr-4": {
             "WpSync\\": "src/"
@@ -8,8 +13,7 @@
     },
     "authors": [
         {
-            "name": "Jerome Toole",
-            "email": "jerometoole@gmail.com"
+            "name": "Jerome Toole"
         }
     ],
     "require": {
