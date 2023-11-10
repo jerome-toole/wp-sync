@@ -40,8 +40,9 @@ environments:
     url: http://production.example.com
 ```
 
-## Usage
-### Pull Command
+## Usage
+
+### Pull Command
 The wp sync pull command allows you to synchronize your WordPress environment from a specified source.
 
 `wp sync pull <env>`
