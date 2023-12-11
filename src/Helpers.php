@@ -34,7 +34,6 @@ class Helpers
             'uploads' => false,
             'db_backup' => true,
             'media_from_remote' => true,
-            'test' => 'default',
         ];
 
         // Merge command specific config settings
@@ -68,5 +67,26 @@ class Helpers
         $config = array_merge($config, $assoc_args);
 
         return $config;
+    }
+
+    public static function syncFiles(string $path_from, string $path_to, array $config)
+    {
+        $rsync_args = [
+            '-avzh',
+            '--progress',
+        ];
+
+        if (!empty($config['port'])) {
+            $port = $config['port'];
+            $rsync_args[] = "-e 'ssh -p {$port}'";
+        }
+
+        $rsync_args = implode(' ', $rsync_args);
+
+        $cmd = "rsync $rsync_args $path_from $path_to";
+
+        \WP_CLI::log($cmd);
+
+        passthru($cmd);
     }
 }
