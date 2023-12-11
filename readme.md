@@ -49,12 +49,11 @@ The wp sync pull command allows you to synchronize your WordPress environment fr
 
 - `<env>`: The environment to sync from (e.g., staging, production).
 
-All options can be set via flags or in the wp-sync.yml file.
+All the settings in the wp-sync.yml file can optionally be set as flags in your CLI command.
 
-```yaml
 Here's an example of using flags:
 ```bash
-wp sync pull staging --db --themes --plugins --uploads --db_backup
+wp sync pull staging --themes=true --db_backup=false
 ```
 
 ## Contributing
