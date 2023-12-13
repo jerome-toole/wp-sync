@@ -60,6 +60,7 @@ pull:
   plugins: true
   uploads: false
   db_backup: false
+  load_media_from_remote: true
 
 push:
   db: true
@@ -67,6 +68,7 @@ push:
   plugins: true
   uploads: false
   db_backup: true
+  load_media_from_remote: false
 
 environments:
   local:
