@@ -28,11 +28,11 @@ class Helpers
         // Set Config Defaults
         $config = [
             'db' => false,
-            'db_backup' => false,
             'plugins' => false,
             'themes' => false,
             'uploads' => false,
-            'load_media_from_remote' => false,
+            'db_backup' => true,
+            'load_media_from_remote' => true,
         ];
 
         // Merge command specific config settings

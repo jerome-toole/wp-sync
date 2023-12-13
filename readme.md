@@ -12,8 +12,6 @@ Setup your wp-sync.yml file:
 pull:
   db: true
   plugins: true
-  db_backup: true
-  load_media_from_remote: true
 
 environments:
   staging:
@@ -30,9 +28,9 @@ $ wp sync pull staging
 ```
 
 What this does:
-- Download and rewrite the database from staging.
-- Dynamically load media from staging if it doesn't exist locally.
-- Backup the database locally before synchronizing.
+- Backs up the database locally before doing anything.
+- Downloads and rewrites the database from staging.
+- Loads media from staging if it doesn't exist locally.
 
 ## Installation
 
@@ -61,8 +59,7 @@ pull:
   themes: false
   plugins: true
   uploads: false
-  db_backup: true
-  load_media_from_remote: true
+  db_backup: false
 
 push:
   db: true
@@ -114,8 +111,8 @@ This command is used in the same way as the pull command, but synchronizes **fro
 - `themes`: Synchronize themes. Default: false.
 - `plugins`: Synchronize plugins. Default: false.
 - `uploads`: Synchronize uploads. Default: false.
-- `db_backup`: Backup the database locally before synchronizing. Default: false.
-- `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: false.
+- `db_backup`: Backup the database locally before synchronizing. Default: true.
+- `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: true.
 
 ## Contributing
 Contributions are welcome. Please feel free to submit pull requests or raise issues on the GitHub repository.
