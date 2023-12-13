@@ -264,7 +264,7 @@ class Push
 
         //TODO add ability to run arbitrary commands after sync
 
-        \WP_CLI::runcommand("$ssh_flag rewrite flush $skip_flag");
+        \WP_CLI::runcommand("$ssh_flag rewrite flush");
         \WP_CLI::success("Sync completed successfully.");
     }
 }

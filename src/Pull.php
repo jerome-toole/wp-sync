@@ -253,11 +253,9 @@ class Pull
 
         //TODO add ability to activate or deactivate plugins after sync
 
-        //TODO Add push configuration.
-
         //TODO add ability to run arbitrary commands after sync
 
-        \WP_CLI::runcommand("rewrite flush $skip_flag");
+        \WP_CLI::runcommand("rewrite flush");
         \WP_CLI::success("Sync completed successfully.");
     }
 }

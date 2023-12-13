@@ -27,12 +27,12 @@ class Helpers
     {
         // Set Config Defaults
         $config = [
-            'db' => true,
-            'db_backup' => true,
+            'db' => false,
+            'db_backup' => false,
             'plugins' => false,
             'themes' => false,
             'uploads' => false,
-            'load_media_from_remote' => true,
+            'load_media_from_remote' => false,
         ];
 
         // Merge command specific config settings
@@ -72,7 +72,6 @@ class Helpers
     {
         $rsync_args = [
             '-avzh',
-            '--progress',
         ];
 
         if (!empty($config['port'])) {
