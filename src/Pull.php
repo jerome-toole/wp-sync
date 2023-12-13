@@ -62,7 +62,6 @@ class Pull
         $ssh_command .= " 'cd {$config['path']} && "; // TODO check if path should be optional
 
         $ssh_flag_parts = [
-            'user' => $config['user'],
             'host' => $config['host'],
             'port' => null,
             'path' => $config['path'],
