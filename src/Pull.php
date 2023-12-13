@@ -148,6 +148,17 @@ class Pull
                 $path_to,
                 $config
             );
+
+            // mu-plugins
+            $path_from = "$host:$path/wp-content/mu-plugins/";
+            $path_to = ABSPATH . 'wp-content/mu-plugins/';
+
+            \WP_CLI::log('- Transferring mu-plugins folder.');
+            \WpSync\Helpers::syncFiles(
+                $path_from,
+                $path_to,
+                $config
+            );
         }
 
         if ($config['themes']) {
