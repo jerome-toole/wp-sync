@@ -6,10 +6,6 @@ It provides a straightforward way to synchronize the database, themes, plugins e
 [Installation](#installation) | [Usage](#usage) | [Options](#options)
 
 ### Example:
-Download and rewrite the database from staging.
-Dynamically load media from staging if it doesn't exist locally.
-Backup the database locally before synchronizing.
-
 Setup your wp-sync.yml file:
 ```yaml
 # wp-sync.yml
@@ -32,6 +28,11 @@ Then run:
 ```bash
 $ wp sync pull staging
 ```
+
+What this does:
+- Download and rewrite the database from staging.
+- Dynamically load media from staging if it doesn't exist locally.
+- Backup the database locally before synchronizing.
 
 ## Installation
 
@@ -88,33 +89,25 @@ environments:
     url: http://production.example.com
 ```
 
-### Pull Command
-The wp sync pull command allows you to synchronize your WordPress environment from a specified source.
+### Commands
+#### Pull
+`wp sync pull` synchronizes your WordPress environment from a specified environment.
 
 `wp sync pull <env> <options>`
 
 - `<env>`: The environment to sync from (e.g., staging, production).
+- `<options>`: The options to use for the sync. See [Options](#options) for more details.
 
-All the settings in the wp-sync.yml file can optionally be set as flags in your CLI command.
-
-Here's an example of using flags:
+Here's an example using option flags:
 ```bash
-wp sync pull staging --themes=true --db_backup=false
+wp sync pull staging --db=true --load_media_from_remote=true
 ```
 
-### Push Command
-The wp sync push command allows you to synchronize your WordPress environment to a specified destination.
+#### Push Command
+`wp sync push` synchronizes your local WordPress environment to a specified environment.
 
-`wp sync push <env>`
-
-- `<env>`: The environment to sync to (e.g., staging, production).
-
-All the settings in the wp-sync.yml file can optionally be set as flags in your CLI command.
-
-Here's an example of using flags:
-```bash
-wp sync push staging --themes=true --db_backup=false
-```
+This command is used in the same way as the pull command, but synchronizes **from** your local environment **to** another environment.
+`wp sync push <env> <options>`
 
 ### Options
 - `db`: Synchronize the database. Default: false.
