@@ -9,4 +9,4 @@ if (file_exists($autoloader = __DIR__ . '/vendor/autoload.php')) {
 }
 
 \WP_CLI::add_command('sync pull', new WpSync\Pull);
-// \WP_CLI::add_command('sync push', new WpSync\Push); //TODO add push command
+\WP_CLI::add_command('sync push', new WpSync\Push);

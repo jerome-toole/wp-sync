@@ -2,19 +2,19 @@
 
 namespace WpSync;
 
-class Pull
+class Push
 {
     public ?string $command;
     public ?string $config_file;
 
     public function __construct()
     {
-        $this->command = 'pull';
+        $this->command = 'push';
         $this->config_file = 'wp-sync.yml';
     }
 
     /**
-     * Pull Command
+     * Push Command
      *
      * <env>
      * : The environment to sync from.
@@ -31,7 +31,7 @@ class Pull
         $env = $args[0];
 
         if (empty($env)) {
-            \WP_CLI::error("Provide an environment to sync. e.g. 'wp sync pull staging'");
+            \WP_CLI::error("Provide an environment to sync. e.g. 'wp sync push staging'");
         }
 
         if (!file_exists($this->config_file)) {
@@ -47,16 +47,26 @@ class Pull
             \WP_CLI::error("The 'host' and 'path' setting must be provided in wp-sync.yml or as a CLI flag");
         }
 
+        if (isset($config['user'])) {
+            // TODO separate user and host so that host doesn't get overwritten
+            $config['host'] = $config['user'] . '@' . $config['host'];
+        }
+
+
+        // String for non-wp-cli ssh commands
+        $ssh_command = "ssh {$config['host']}";
+
+        if (isset($config['port'])) {
+            $ssh_command .= " -p {$config['port']}";
+        }
+
+        $ssh_command .= " 'cd {$config['path']} && "; // TODO check if path should be optional
+
         $ssh_flag_parts = [
-            'user' => $config['user'],
             'host' => $config['host'],
             'port' => null,
             'path' => $config['path'],
         ];
-
-        if (isset($config['user'])) {
-            $ssh_flag_parts['host'] = $config['user'] . '@' . $config['host'];
-        }
 
         if (isset($config['port'])) {
             $ssh_flag_parts['port'] = ':' . $config['port'];
@@ -90,7 +100,7 @@ class Pull
         $config_str = print_r($config, true);
 
         \WP_CLI::confirm(
-            "WARNING: This will replace the local database/files with the remote database and files.\n\n" .
+            "WARNING: This will replace the remote database/files with the local database and files.\n\n" .
                 "Config:\n" .
                 "$config_str\n\n" .
                 "Local domain:\n$local_domain.\n\n" .
@@ -99,24 +109,32 @@ class Pull
         );
 
         if ($config['db_backup']) {
-            $path = ABSPATH;
+            $host = rtrim($config['host'], '/');
+            $path = rtrim($config['path'], '/');
             $backupsDirName = 'wp-sync-backups';  // TODO allow users to specify a custom backup path
-            $db_backup_path = "$path/$backupsDirName/wp_sync_backup_" . date('Ymd_His') . ".sql";
+            $db_backup_path = ABSPATH . "$backupsDirName/";
+            $db_backup_name = "wp_sync_backup_{$env}_" . date('Ymd_His') . ".sql";
 
-            // TODO Create the backups directory or set permissions if it already exists
+            // Create the backups directory or set permissions if it already exists
+            if (!file_exists("$db_backup_path")) {
+                exec("mkdir -p -m 700 $db_backup_path");
+            } else {
+                exec("chmod 700 $db_backup_path");
+            }
 
-            \WP_CLI::runcommand("db export $db_backup_path $skip_flag");
+            // TODO set up remote backup
+            \WP_CLI::runcommand("$ssh_flag db export - > \"$db_backup_path/$db_backup_name\" $skip_flag");
 
             \WP_CLI::log("- Database backup saved to $db_backup_path\n");
         }
 
-
+        // TODO add default ignore string for all syncs
         if ($config['uploads']) {
             $host = rtrim($config['host'], '/');
             $path = rtrim($config['path'], '/');
 
-            $path_from = "$host:$path/wp-content/uploads/";
-            $path_to = ABSPATH . 'wp-content/uploads/';
+            $path_from = ABSPATH . 'wp-content/uploads/';
+            $path_to = "$host:$path/wp-content/uploads/";
 
             \WP_CLI::log('- Transferring uploads folder.');
             \WpSync\Helpers::syncFiles(
@@ -130,8 +148,8 @@ class Pull
             $host = rtrim($config['host'], '/');
             $path = rtrim($config['path'], '/');
 
-            $path_from = "$host:$path/wp-content/plugins/";
-            $path_to = ABSPATH . 'wp-content/plugins/';
+            $path_from = ABSPATH . 'wp-content/plugins/';
+            $path_to = "$host:$path/wp-content/plugins/";
 
             \WP_CLI::log('- Transferring plugins folder.');
             \WpSync\Helpers::syncFiles(
@@ -145,8 +163,8 @@ class Pull
             $host = rtrim($config['host'], '/');
             $path = rtrim($config['path'], '/');
 
-            $path_from = "$host:$path/wp-content/themes/";
-            $path_to = ABSPATH . 'wp-content/themes/';
+            $path_from = ABSPATH . 'wp-content/themes/';
+            $path_to = "$host:$path/wp-content/themes/";
 
             \WP_CLI::log('- Transferring themes folder.');
             \WpSync\Helpers::syncFiles(
@@ -156,9 +174,9 @@ class Pull
             );
         }
 
-        //TODO add ability to rsync other folders
+        // TODO add ability to rsync other folders
 
-        // //TODO test mismatched prefixes
+        // TODO test mismatched prefixes
         // $local_prefix = \WP_CLI::runcommand("config get table_prefix");
         // $remote_prefix = \WP_CLI::runcommand(
         //     "$ssh_flag config get table_prefix",
@@ -186,26 +204,14 @@ class Pull
         // }
 
         if ($config['db']) {
-            // Export the remote database
-            $db_sync_file = ABSPATH . 'wp-sync-temp.sql';
-
-            \WP_CLI::log("- Exporting $env database\n");
-            // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
-
-            \WP_CLI::runcommand("$ssh_flag db export - > \"$db_sync_file\" $skip_flag");
-
-            // Import into local DB
-            \WP_CLI::log('- Importing database.');
-            \WP_CLI::runcommand("db import \"$db_sync_file\" $skip_flag");
-
-            // Remove temporary sync file
-            unlink($db_sync_file);
+            \WP_CLI::log("- Migrating local database to $env.");
+            exec("wp db export - $skip_flag | $ssh_command wp db import - $skip_flag'");
 
             // Search and replace domains
             \WP_CLI::log('- Replacing domains and setting home and siteurl.');
-            \WP_CLI::runcommand("$skip_flag option update home '$local_domain' $skip_flag");
-            \WP_CLI::runcommand("$skip_flag option update siteurl '$local_domain' $skip_flag");
-            \WP_CLI::runcommand("$skip_flag search-replace $remote_domain $local_domain $skip_flag");
+            \WP_CLI::runcommand("$ssh_flag option update home '$remote_domain' $skip_flag");
+            \WP_CLI::runcommand("$ssh_flag option update siteurl '$remote_domain' $skip_flag");
+            \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain $skip_flag");
         }
 
         // TODO set up custom search and replace
@@ -241,15 +247,16 @@ class Pull
         //   }
         // }
 
-        if ($config['load_media_from_remote']) {
-            \WP_CLI::log('- Set site to load media from remote using BE Media from Remote');
+        // TODO update load_media_from_remote to handle push command
+        // if ($config['load_media_from_remote']) {
+        //     \WP_CLI::log('- Set site to load media from remote using BE Media from Remote');
 
-            // Install and activate be-media-from-production plugin
-            \WP_CLI::runcommand("plugin install --activate be-media-from-production $skip_flag");
-            \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
+        //     // Install and activate be-media-from-production plugin
+        //     \WP_CLI::runcommand("plugin install --activate be-media-from-production $skip_flag");
+        //     \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
 
-            //TODO allow remote media domain to be overriden in config
-        }
+        //     //TODO allow remote media domain to be overriden in config
+        // }
 
         //TODO add ability to activate or deactivate plugins after sync
 
@@ -257,7 +264,7 @@ class Pull
 
         //TODO add ability to run arbitrary commands after sync
 
-        \WP_CLI::runcommand("rewrite flush $skip_flag");
+        \WP_CLI::runcommand("$ssh_flag rewrite flush $skip_flag");
         \WP_CLI::success("Sync completed successfully.");
     }
 }
