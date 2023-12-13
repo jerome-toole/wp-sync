@@ -52,7 +52,6 @@ class Push
             $config['host'] = $config['user'] . '@' . $config['host'];
         }
 
-
         // String for non-wp-cli ssh commands
         $ssh_command = "ssh {$config['host']}";
 

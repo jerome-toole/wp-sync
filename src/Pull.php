@@ -47,16 +47,26 @@ class Pull
             \WP_CLI::error("The 'host' and 'path' setting must be provided in wp-sync.yml or as a CLI flag");
         }
 
+        if (isset($config['user'])) {
+            // TODO separate user and host so that host doesn't get overwritten
+            $config['host'] = $config['user'] . '@' . $config['host'];
+        }
+
+        // String for non-wp-cli ssh commands
+        $ssh_command = "ssh {$config['host']}";
+
+        if (isset($config['port'])) {
+            $ssh_command .= " -p {$config['port']}";
+        }
+
+        $ssh_command .= " 'cd {$config['path']} && "; // TODO check if path should be optional
+
         $ssh_flag_parts = [
             'user' => $config['user'],
             'host' => $config['host'],
             'port' => null,
             'path' => $config['path'],
         ];
-
-        if (isset($config['user'])) {
-            $ssh_flag_parts['host'] = $config['user'] . '@' . $config['host'];
-        }
 
         if (isset($config['port'])) {
             $ssh_flag_parts['port'] = ':' . $config['port'];
