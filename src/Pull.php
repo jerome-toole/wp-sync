@@ -108,7 +108,7 @@ class Pull
         );
 
         if ($config['db_backup']) {
-            $path = ABSPATH;
+            $path = rtrim(ABSPATH, '/');
             $backupsDirName = 'wp-sync-backups';  // TODO allow users to specify a custom backup path
             $db_backup_path = "$path/$backupsDirName/wp_sync_backup_" . date('Ymd_His') . ".sql";
 

@@ -80,8 +80,17 @@ class Helpers
         }
 
         $rsync_args = implode(' ', $rsync_args);
-
         $cmd = "rsync $rsync_args $path_from $path_to";
+
+        // $deploy_ignore_path = rtrim($path_from, '/') . '/.deployignore';
+
+        // // if a .deployignore file exists, use it
+        // if (file_exists("$deploy_ignore_path")) {
+        //     \WP_CLI::log("using .deployignore file found in $deploy_ignore_path");
+        //     $cmd .= " --exclude-from='$deploy_ignore_path'";
+        // }
+
+        // \WP_CLI::error($cmd);
 
         \WP_CLI::log($cmd);
 
