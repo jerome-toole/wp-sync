@@ -77,46 +77,66 @@ class Pull
         if (isset($yaml_config['environments']['local']['url'])) {
             $local_domain = $yaml_config['environments']['local']['url'];
         } else {
-            $local_domain = \WP_CLI::runcommand("option get home $skip_flag", ['return' => true]);
-            \WP_CLI::Log("Set local domain ($local_domain) from local site options.");
+            $local_domain = \WP_CLI::runcommand("option get home $skip_flag", [
+                'return' => true,
+                'exit_error' => false,
+            ]);
+
+            if (empty($local_domain)) {
+                \WP_CLI::Error("Could not get local domain. Please check your config.");
+            }
+
+            \WP_CLI::Log("Local domain set from site options: ($local_domain)");
         }
+
 
         if (isset($config['url'])) {
             $remote_domain = $config['url'];
         } else {
-            $remote_domain = \WP_CLI::runcommand("$ssh_flag option get home $skip_flag", ['return' => true]);
-            \WP_CLI::Log("Set remote domain ($remote_domain) from remote site options.");
-        }
+            // \WP_CLI::Log("$ssh_flag option get home $skip_flag");
+            $remote_domain = \WP_CLI::runcommand("$ssh_flag option get home $skip_flag", [
+                'return' => true,
+                'exit_error' => false,
+            ]);
 
-        if (empty($local_domain)) {
-            \WP_CLI::error('Could not get local domain. Please check your config.');
-        }
+            if (empty($remote_domain)) {
+                \WP_CLI::Error("Could not get remote domain. Please check your connection config\n[$ssh_flag].");
+            }
 
-        if (empty($remote_domain)) {
-            \WP_CLI::error('Could not get remote domain. Please check your config.');
+            \WP_CLI::Log("Remote domain set from site options: ($remote_domain)");
         }
 
         $config_str = print_r($config, true);
 
         \WP_CLI::confirm(
+            "\n\n" .
             "WARNING: This will replace the local database/files with the remote database and files.\n\n" .
-                "Config:\n" .
-                "$config_str\n\n" .
-                "Local domain:\n$local_domain.\n\n" .
-                "Remote domain:\n$remote_domain.\n\n" .
-                "Continue?"
+            "Config:\n" .
+            "$config_str\n\n" .
+            "Local domain:\n$local_domain.\n\n" .
+            "Remote domain:\n$remote_domain.\n\n" .
+            "Continue?"
         );
 
         if ($config['db_backup']) {
+            // TODO secure the backups directory
+
             $path = rtrim(ABSPATH, '/');
             $backupsDirName = 'wp-sync-backups';  // TODO allow users to specify a custom backup path
-            $db_backup_path = "$path/$backupsDirName/wp_sync_backup_" . date('Ymd_His') . ".sql";
+            $backupsPath = "$path/$backupsDirName";
+            $backupFileName = "wp_sync_backup_" . date('Ymd_His') . ".sql";
 
-            // TODO Create the backups directory or set permissions if it already exists
+            if (!file_exists($backupsPath)) {
+                mkdir($backupsPath, 0755, true);
+            } else {
+                if (!is_writable($backupsPath)) {
+                    \WP_CLI::error("The backups directory is not writable. Please check the permissions.");
+                }
+            }
 
-            \WP_CLI::runcommand("db export $db_backup_path $skip_flag");
+            \WP_CLI::runcommand("db export $backupsPath/$backupFileName $skip_flag");
 
-            \WP_CLI::log("- Database backup saved to $db_backup_path\n");
+            \WP_CLI::log("- Database backup saved to $backupsPath/$backupFileName\n");
         }
 
 
@@ -169,6 +189,7 @@ class Pull
             $path_to = ABSPATH . 'wp-content/themes/';
 
             \WP_CLI::log('- Transferring themes folder.');
+
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -212,7 +233,7 @@ class Pull
             \WP_CLI::log("- Exporting $env database\n");
             // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
 
-            \WP_CLI::runcommand("$ssh_flag db export - > \"$db_sync_file\" $skip_flag");
+            \WP_CLI::runcommand("$ssh_flag db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
 
             // Import into local DB
             \WP_CLI::log('- Importing database.');

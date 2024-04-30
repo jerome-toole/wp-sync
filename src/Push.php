@@ -100,11 +100,11 @@ class Push
 
         \WP_CLI::confirm(
             "WARNING: This will replace the remote database/files with the local database and files.\n\n" .
-                "Config:\n" .
-                "$config_str\n\n" .
-                "Local domain:\n$local_domain.\n\n" .
-                "Remote domain:\n$remote_domain.\n\n" .
-                "Continue?"
+            "Config:\n" .
+            "$config_str\n\n" .
+            "Local domain:\n$local_domain.\n\n" .
+            "Remote domain:\n$remote_domain.\n\n" .
+            "Continue?"
         );
 
         // if ($config['db_backup']) {
