@@ -33,6 +33,8 @@ class Helpers
             'uploads' => false,
             'db_backup' => true,
             'load_media_from_remote' => true,
+            'additional_search_replace' => [],
+            'verbose' => false,
         ];
 
         // Merge command specific config settings
@@ -62,6 +64,12 @@ class Helpers
             }
         }
 
+        // Handle boolean CLI flags (like --verbose)
+        if (isset($assoc_args['verbose'])) {
+            $config['verbose'] = true;
+            unset($assoc_args['verbose']);
+        }
+
         // Merge remaining CLI flags with config
         $config = array_merge($config, $assoc_args);
 
@@ -75,190 +83,61 @@ class Helpers
         return preg_replace('#^https?:#', '', rtrim($url, '/'));
     }
 
-    public static function performMultisiteSearchReplace(string $old_domain, string $new_domain, string $ssh_flag = '', string $skip_flag = '--skip-plugins --skip-themes')
+    public static function processAdditionalSearchReplace(array $config, string $command_prefix, string $skip_flag, bool $is_multisite = false)
     {
-        $command_prefix = $ssh_flag ? "$ssh_flag " : '';
-
-        // Check if this is a multisite installation
-        $is_multisite_cmd = $command_prefix . "config get MULTISITE $skip_flag";
-        $is_multisite = \WP_CLI::runcommand($is_multisite_cmd, ['return' => true, 'exit_error' => false]);
-
-        if ($is_multisite !== '1') {
-            // Single site - use standard search-replace
-            \WP_CLI::log('- Single site detected, using standard search-replace');
-            \WP_CLI::runcommand($command_prefix . "search-replace $old_domain $new_domain $skip_flag");
+        if (!isset($config['additional_search_replace']) || !is_array($config['additional_search_replace']) || empty($config['additional_search_replace'])) {
             return;
         }
 
-        \WP_CLI::log('- Multisite network detected, performing comprehensive search-replace');
+        \WP_CLI::log('- Processing additional search-replace operations');
 
-        // Get network domain and path configuration
+        foreach ($config['additional_search_replace'] as $replacement) {
+            if (!is_array($replacement) || !isset($replacement['search']) || !isset($replacement['replace'])) {
+                continue;
+            }
+
+            $search = $replacement['search'];
+            $replace = $replacement['replace'];
+
+            if (empty($search) || empty($replace)) {
+                continue;
+            }
+
+            $network_flag = $is_multisite ? '--network' : '';
+            $quiet_flag = !empty($config['verbose']) ? '' : '--quiet';
+            \WP_CLI::log("- Additional replacement: '$search' -> '$replace'");
+            \WP_CLI::runcommand($command_prefix . "search-replace '$search' '$replace' --all-tables $network_flag $quiet_flag $skip_flag");
+        }
+    }
+
+    public static function performMultisiteSearchReplace(string $old_domain, string $new_domain, array $config = [], string $ssh_flag = '', string $skip_flag = '--skip-plugins --skip-themes')
+    {
+        $command_prefix = $ssh_flag ? "$ssh_flag " : '';
+
+        $quiet_flag = !empty($config['verbose']) ? '' : '--quiet';
+
+        \WP_CLI::log('- Multisite network detected, performing search-replace');
+
+        $old_domain_stripped = preg_replace('#^https?://(www\.)?#', '', rtrim($old_domain, '/'));
+        $new_domain_stripped = preg_replace('#^https?://(www\.)?#', '', rtrim($new_domain, '/'));
+
+        \WP_CLI::log("- Network search-replace: '$old_domain_stripped' -> '$new_domain_stripped'");
+        \WP_CLI::runcommand($command_prefix . "search-replace '$old_domain_stripped' '$new_domain_stripped' --network --all-tables $quiet_flag $skip_flag");
+
+        // Update network constants
         $network_domain_cmd = $command_prefix . "config get DOMAIN_CURRENT_SITE $skip_flag";
         $network_domain = \WP_CLI::runcommand($network_domain_cmd, ['return' => true, 'exit_error' => false]);
 
-        $network_path_cmd = $command_prefix . "config get PATH_CURRENT_SITE $skip_flag";
-        $network_path = \WP_CLI::runcommand($network_path_cmd, ['return' => true, 'exit_error' => false]);
-
-        // 1. Perform comprehensive network-wide search-replace with all URL formats
-        $url_patterns = [
-            "https://$old_domain",
-            "http://$old_domain",
-            "https://www.$old_domain",
-            "http://www.$old_domain",
-            "//$old_domain",
-            $old_domain
-        ];
-
-        $new_url_patterns = [
-            "https://$new_domain",
-            "http://$new_domain",
-            "https://www.$new_domain",
-            "http://www.$new_domain",
-            "//$new_domain",
-            $new_domain
-        ];
-
-        // Use protocol-less patterns for main replacement
-        $old_pattern = self::strip_protocol('https://' . $old_domain);
-        $new_pattern = self::strip_protocol('https://' . $new_domain);
-        \WP_CLI::log("- Replacing '$old_pattern' with '$new_pattern' across network (protocol-agnostic)");
-        \WP_CLI::runcommand($command_prefix . "search-replace '$old_pattern' '$new_pattern' --network --all-tables --dry-run=false $skip_flag");
-
-        // Continue with the rest of the original patterns for completeness
-        for ($i = 0; $i < count($url_patterns); $i++) {
-            $old_pattern = $url_patterns[$i];
-            $new_pattern = $new_url_patterns[$i];
-            \WP_CLI::log("- Replacing '$old_pattern' with '$new_pattern' across network");
-            \WP_CLI::runcommand($command_prefix . "search-replace '$old_pattern' '$new_pattern' --network --all-tables --dry-run=false $skip_flag");
-        }
-
-        // 2. Get all sites and perform individual site search-replace operations
-        $sites_cmd = $command_prefix . "site list --fields=blog_id,url,domain,path --format=json $skip_flag";
-        $sites_json = \WP_CLI::runcommand($sites_cmd, ['return' => true, 'exit_error' => false]);
-
-        if (!empty($sites_json)) {
-            $sites = json_decode($sites_json, true);
-
-            if (is_array($sites)) {
-                foreach ($sites as $site) {
-                    $blog_id = $site['blog_id'];
-                    $site_url = rtrim($site['url'], '/');
-                    $site_domain = $site['domain'];
-                    $site_path = $site['path'];
-
-                    \WP_CLI::log("- Processing site $blog_id: $site_url");
-
-                    // Update the site-specific tables
-                    foreach ($url_patterns as $j => $old_pattern) {
-                        $new_pattern = $new_url_patterns[$j];
-                        $old_site_pattern = str_replace($old_domain, $site_domain, $old_pattern);
-                        $new_site_pattern = str_replace($old_domain, str_replace($old_domain, $new_domain, $site_domain), $new_pattern);
-
-                        // Only process if the patterns are different and contain the old domain
-                        if ($old_site_pattern !== $new_site_pattern && strpos($old_site_pattern, $old_domain) !== false) {
-                            \WP_CLI::runcommand($command_prefix . "search-replace '$old_site_pattern' '$new_site_pattern' --url='$site_url' --all-tables $skip_flag");
-                        }
-                    }
-
-                    // Update site-specific options
-                    $new_site_domain = str_replace($old_domain, $new_domain, $site_domain);
-                    $new_site_url = str_replace($old_domain, $new_domain, $site_url);
-
-                    if ($site_domain !== $new_site_domain) {
-                        // Update home and siteurl for this specific site
-                        \WP_CLI::runcommand($command_prefix . "option update home '$new_site_url' --url='$site_url' $skip_flag");
-                        \WP_CLI::runcommand($command_prefix . "option update siteurl '$new_site_url' --url='$site_url' $skip_flag");
-
-                        \WP_CLI::log("- Updated site $blog_id URLs: $site_url -> $new_site_url");
-                    }
-                }
-            }
-        }
-
-        // 3. Update network configuration constants
         if ($network_domain && strpos($network_domain, $old_domain) !== false) {
             $new_network_domain = str_replace($old_domain, $new_domain, $network_domain);
             \WP_CLI::runcommand($command_prefix . "config set DOMAIN_CURRENT_SITE '$new_network_domain' --type=constant $skip_flag");
             \WP_CLI::log("- Updated DOMAIN_CURRENT_SITE: $network_domain -> $new_network_domain");
         }
 
-        // 4. Update critical multisite tables directly
-        $table_prefix_cmd = $command_prefix . "config get table_prefix $skip_flag";
-        $table_prefix = \WP_CLI::runcommand($table_prefix_cmd, ['return' => true, 'exit_error' => false]);
+        // Process additional search-replace operations for multisite
+        self::processAdditionalSearchReplace($config, $command_prefix, $skip_flag, true);
 
-        if ($table_prefix) {
-            $old_domain_escaped = addslashes($old_domain);
-            $new_domain_escaped = addslashes($new_domain);
-
-            // Update wp_blogs table domains
-            $blogs_table = $table_prefix . "blogs";
-            \WP_CLI::runcommand($command_prefix . "db query \"UPDATE $blogs_table SET domain = REPLACE(domain, '$old_domain_escaped', '$new_domain_escaped') WHERE domain LIKE '%$old_domain_escaped%'\" $skip_flag");
-            \WP_CLI::log("- Updated wp_blogs table domains");
-
-            // Update wp_site table domain (network main domain)
-            $site_table = $table_prefix . "site";
-            \WP_CLI::runcommand($command_prefix . "db query \"UPDATE $site_table SET domain = REPLACE(domain, '$old_domain_escaped', '$new_domain_escaped') WHERE domain LIKE '%$old_domain_escaped%'\" $skip_flag");
-            \WP_CLI::log("- Updated wp_site table domain");
-
-            // Update siteurl and home options in all site options tables
-            if (!empty($sites_json)) {
-                $sites = json_decode($sites_json, true);
-
-                if (is_array($sites)) {
-                    foreach ($sites as $site) {
-                        $blog_id = $site['blog_id'];
-                        $site_url = rtrim($site['url'], '/');
-                        $new_site_url = str_replace($old_domain, $new_domain, $site_url);
-
-                        // Determine the options table name for this site
-                        if ($blog_id == 1) {
-                            $options_table = $table_prefix . "options";
-                        } else {
-                            $options_table = $table_prefix . $blog_id . "_options";
-                        }
-
-                        // Update home and siteurl in the options table directly
-                        \WP_CLI::runcommand($command_prefix . "db query \"UPDATE $options_table SET option_value = '$new_site_url' WHERE option_name = 'home'\" $skip_flag");
-                        \WP_CLI::runcommand($command_prefix . "db query \"UPDATE $options_table SET option_value = '$new_site_url' WHERE option_name = 'siteurl'\" $skip_flag");
-
-                        // Also update any other URLs in the options table
-                        \WP_CLI::runcommand($command_prefix . "db query \"UPDATE $options_table SET option_value = REPLACE(option_value, '$old_domain_escaped', '$new_domain_escaped') WHERE option_value LIKE '%$old_domain_escaped%'\" $skip_flag");
-
-                        \WP_CLI::log("- Updated $options_table (site $blog_id) home/siteurl: $site_url -> $new_site_url");
-                    }
-                }
-            }
-
-            // Final comprehensive search-replace using WP-CLI for remaining data
-            \WP_CLI::log("- Performing final comprehensive search-replace");
-
-            $final_patterns = [
-                "https://$old_domain",
-                "http://$old_domain",
-                "https://www.$old_domain",
-                "http://www.$old_domain",
-                "//$old_domain"
-            ];
-
-            $final_new_patterns = [
-                "https://$new_domain",
-                "http://$new_domain",
-                "https://www.$new_domain",
-                "http://$new_domain",
-                "//$new_domain"
-            ];
-
-            for ($i = 0; $i < count($final_patterns); $i++) {
-                $old_pattern = $final_patterns[$i];
-                $new_pattern = $final_new_patterns[$i];
-
-                // Use WP-CLI search-replace with all tables and network flags
-                \WP_CLI::runcommand($command_prefix . "search-replace '$old_pattern' '$new_pattern' --all-tables --network --dry-run=false $skip_flag");
-                \WP_CLI::log("- Final replacement: '$old_pattern' -> '$new_pattern'");
-            }
-        }
-
-        \WP_CLI::log('- Completed comprehensive multisite search-replace');
+        \WP_CLI::log('- Completed multisite search-replace');
     }
 
     public static function isMultisite(string $ssh_flag = '', string $skip_flag = '--skip-plugins --skip-themes'): bool
@@ -356,24 +235,97 @@ class Helpers
             if (strpos($command, 'wp ') === 0) {
                 // WP-CLI command - add skip flags and optional SSH
                 $full_command = $ssh_flag ? "$ssh_flag $command $skip_flag" : "$command $skip_flag";
-                \WP_CLI::log("- Running WP-CLI command: $full_command");
+                \WP_CLI::log("  • Running WP-CLI: $command");
                 \WP_CLI::runcommand(str_replace('wp ', '', $full_command));
             } else {
                 // Shell command - run as-is
-                \WP_CLI::log("- Running shell command: $command");
+                \WP_CLI::log("  • Running shell: $command");
                 $result = null;
                 $exit_code = null;
                 exec($command, $result, $exit_code);
 
                 if ($exit_code !== 0) {
-                    \WP_CLI::warning("Command failed with exit code $exit_code: $command");
+                    \WP_CLI::warning(\WP_CLI::colorize("    %R✗%n Command failed with exit code $exit_code"));
                     if (!empty($result)) {
-                        \WP_CLI::log("Output: " . implode("\n", $result));
+                        \WP_CLI::log("    Output: " . implode("\n    ", $result));
                     }
                 } else {
-                    \WP_CLI::success("Command completed successfully: $command");
+                    \WP_CLI::log(\WP_CLI::colorize("    %G✓%n Command completed successfully"));
                 }
             }
         }
+    }
+
+    public static function formatConfig(array $config, string $env): string
+    {
+        $output = [];
+        $output[] = "━━━ Sync Configuration ━━━";
+        $output[] = "";
+        $output[] = \WP_CLI::colorize("environment: %Y$env%n");
+        $output[] = "";
+
+        // Core sync settings
+        $sync_settings = [
+            'db' => 'Database',
+            'themes' => 'Themes',
+            'plugins' => 'Plugins',
+            'uploads' => 'Uploads'
+        ];
+
+        $output[] = "sync:";
+        foreach ($sync_settings as $key => $label) {
+            $value = $config[$key] ? 'true' : 'false';
+            $status = $config[$key] ? \WP_CLI::colorize('%G✓%n') : \WP_CLI::colorize('%R✗%n');
+            $output[] = "  $key: $value $status";
+        }
+        $output[] = "";
+
+        // Connection settings
+        $output[] = "connection:";
+        if (isset($config['host'])) {
+            $output[] = "  host: " . $config['host'];
+        }
+        if (isset($config['port'])) {
+            $output[] = "  port: " . $config['port'];
+        }
+        if (isset($config['path'])) {
+            $output[] = "  path: " . $config['path'];
+        }
+        $output[] = "";
+
+        // Optional settings
+        $optional_settings = [
+            'db_backup' => 'Database Backup',
+            'load_media_from_remote' => 'Load Media from Remote',
+            'verbose' => 'Verbose Output'
+        ];
+
+        $output[] = "options:";
+        foreach ($optional_settings as $key => $label) {
+            if (isset($config[$key])) {
+                $value = $config[$key] ? 'true' : 'false';
+                $status = $config[$key] ? \WP_CLI::colorize('%G✓%n') : \WP_CLI::colorize('%R✗%n');
+                $output[] = "  $key: $value $status";
+            }
+        }
+
+        // Custom commands
+        $commands = ['before_pull', 'after_pull', 'before_push', 'after_push'];
+        $has_commands = false;
+        foreach ($commands as $cmd) {
+            if (isset($config[$cmd]) && is_array($config[$cmd]) && !empty($config[$cmd])) {
+                if (!$has_commands) {
+                    $output[] = "";
+                    $output[] = "custom_commands:";
+                    $has_commands = true;
+                }
+                $output[] = "  $cmd:";
+                foreach ($config[$cmd] as $command) {
+                    $output[] = "    - \"$command\"";
+                }
+            }
+        }
+
+        return implode("\n", $output);
     }
 }

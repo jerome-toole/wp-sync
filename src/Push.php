@@ -21,6 +21,9 @@ class Push
      *
      * [--db_backup=<true|false>]
      * : Whether to backup the local database before syncing.
+     *
+     * [--verbose]
+     * : Show detailed search-replace output tables.
      * TODO Document all options
      *
      *
@@ -97,21 +100,39 @@ class Push
             \WP_CLI::error('Could not get remote domain. Please check your config.');
         }
 
-        $config_str = print_r($config, true);
+        $config_display = \WpSync\Helpers::formatConfig($config, $env);
+
+        // Build dynamic warning based on config
+        $warnings = [];
+        if ($config['db']) {
+            $warnings[] = "   • Remote database will be replaced with local database";
+        }
+        $file_operations = [];
+        if ($config['themes']) $file_operations[] = 'themes';
+        if ($config['plugins']) $file_operations[] = 'plugins'; 
+        if ($config['uploads']) $file_operations[] = 'uploads';
+        if (!empty($file_operations)) {
+            $warnings[] = "   • Remote " . implode(', ', $file_operations) . " will be replaced with local files";
+        }
+        if (!empty($warnings)) {
+            $warnings[] = "   • This action cannot be undone without a backup";
+        }
 
         \WP_CLI::confirm(
-            "WARNING: This will replace the remote database/files with the local database and files.\n\n" .
-            "Config:\n" .
-            "$config_str\n\n" .
-            "Local domain:\n$local_domain.\n\n" .
-            "Remote domain:\n$remote_domain.\n\n" .
-            "Continue?"
+            "\n" .
+            $config_display . "\n\n" .
+            "━━━ Domain Configuration ━━━\n" .
+            "local_domain:  $local_domain\n" .
+            "remote_domain: $remote_domain\n\n" .
+            (!empty($warnings) ? \WP_CLI::colorize("%Y⚠️  This will overwrite your REMOTE '$env' environment%n\n") . implode("\n", $warnings) . "\n\n" : "") .
+            \WP_CLI::colorize("Continue with push from %G'local'%n to %Y'$env'%n?")
         );
 
         // Run before_push commands
         if (isset($config['before_push']) && is_array($config['before_push'])) {
-            \WP_CLI::log('- Running before_push commands');
+            \WP_CLI::log('━━━ Running Before Push Commands ━━━');
             \WpSync\Helpers::runCustomCommands($config['before_push'], $ssh_flag, $skip_flag);
+            \WP_CLI::log('');
         }
 
         // if ($config['db_backup']) {
@@ -142,7 +163,8 @@ class Push
             $path_from = ABSPATH . 'wp-content/uploads/';
             $path_to = "$host:$path/wp-content/uploads/";
 
-            \WP_CLI::log('- Transferring uploads folder.');
+            \WP_CLI::log('━━━ Transferring Files ━━━');
+            \WP_CLI::log('• Syncing uploads folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -157,7 +179,7 @@ class Push
             $path_from = ABSPATH . 'wp-content/plugins/';
             $path_to = "$host:$path/wp-content/plugins/";
 
-            \WP_CLI::log('- Transferring plugins folder.');
+            \WP_CLI::log('• Syncing plugins folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -173,7 +195,7 @@ class Push
             $path_from = ABSPATH . 'wp-content/themes/';
             $path_to = "$host:$path/wp-content/themes/";
 
-            \WP_CLI::log('- Transferring themes folder.');
+            \WP_CLI::log('• Syncing themes folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -211,21 +233,27 @@ class Push
         // }
 
         if ($config['db']) {
-            \WP_CLI::log("- Migrating local database to $env.");
+            \WP_CLI::log('━━━ Syncing Database ━━━');
+            \WP_CLI::log("• Migrating local database to $env...");
             exec("wp db export - $skip_flag | $ssh_command wp db import - $skip_flag'");
 
             // Search and replace domains
-            \WP_CLI::log('- Replacing domains and setting home and siteurl.');
-            
+            \WP_CLI::log('• Updating domains and URLs...');
+
             // Check if this is a multisite installation
             if (\WpSync\Helpers::isMultisite($ssh_flag, $skip_flag)) {
-                \WP_CLI::log('- Multisite installation detected, using network-aware search-replace');
-                \WpSync\Helpers::performMultisiteSearchReplace($local_domain, $remote_domain, $ssh_flag, $skip_flag);
+                \WP_CLI::log('• Multisite installation detected, using network-aware search-replace');
+                \WpSync\Helpers::performMultisiteSearchReplace($local_domain, $remote_domain, $config, $ssh_flag, $skip_flag);
             } else {
                 \WP_CLI::runcommand("$ssh_flag option update home '$remote_domain' $skip_flag");
                 \WP_CLI::runcommand("$ssh_flag option update siteurl '$remote_domain' $skip_flag");
-                \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain $skip_flag");
+                $quiet_flag = !empty($config['verbose']) ? '' : '--quiet';
+                \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain --all-tables $quiet_flag $skip_flag");
+                
+                // Process additional search-replace operations for single site
+                \WpSync\Helpers::processAdditionalSearchReplace($config, $ssh_flag ? "$ssh_flag " : '', $skip_flag);
             }
+            \WP_CLI::log('');
         }
 
         // TODO set up custom search and replace
@@ -278,14 +306,18 @@ class Push
 
         //TODO add ability to run arbitrary commands after sync
 
+        \WP_CLI::log('━━━ Finalizing Sync ━━━');
+        \WP_CLI::log('• Flushing rewrite rules on remote...');
         \WP_CLI::runcommand("$ssh_flag rewrite flush");
 
         // Run after_push commands
         if (isset($config['after_push']) && is_array($config['after_push'])) {
-            \WP_CLI::log('- Running after_push commands');
+            \WP_CLI::log('━━━ Running After Push Commands ━━━');
             \WpSync\Helpers::runCustomCommands($config['after_push'], $ssh_flag, $skip_flag);
         }
 
-        \WP_CLI::success("Sync completed successfully.");
+        \WP_CLI::log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        \WP_CLI::success("🎉 Push from 'local' to '$env' completed successfully!");
+        \WP_CLI::log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
 }

@@ -21,6 +21,9 @@ class Pull
      *
      * [--db_backup=<true|false>]
      * : Whether to backup the local database before syncing.
+     *
+     * [--verbose]
+     * : Show detailed search-replace output tables.
      * TODO Document all options
      *
      *
@@ -106,22 +109,40 @@ class Pull
             \WP_CLI::Log("Remote domain set from site options: ($remote_domain)");
         }
 
-        $config_str = print_r($config, true);
+        $config_display = \WpSync\Helpers::formatConfig($config, $env);
+
+        // Build dynamic warning based on config
+        $warnings = [];
+        if ($config['db']) {
+            $warnings[] = "   • Local database will be replaced with remote database";
+        }
+        $file_operations = [];
+        if ($config['themes']) $file_operations[] = 'themes';
+        if ($config['plugins']) $file_operations[] = 'plugins';
+        if ($config['uploads']) $file_operations[] = 'uploads';
+        if (!empty($file_operations)) {
+            $warnings[] = "   • Local " . implode(', ', $file_operations) . " will be replaced with remote files";
+        }
+        if (!empty($warnings)) {
+            $warnings[] = "   • This action cannot be undone without a backup";
+        }
 
         \WP_CLI::confirm(
-            "\n\n" .
-            "WARNING: This will replace the local database/files with the remote database and files.\n\n" .
-            "Config:\n" .
-            "$config_str\n\n" .
-            "Local domain:\n$local_domain.\n\n" .
-            "Remote domain:\n$remote_domain.\n\n" .
-            "Continue?"
+            "\n" .
+            $config_display . "\n\n" .
+            "━━━ Domain Configuration ━━━\n" .
+            "local_domain:  $local_domain\n" .
+            "remote_domain: $remote_domain\n\n" .
+            (!empty($warnings) ? \WP_CLI::colorize("%Y⚠️  This will overwrite your LOCAL environment%n\n") . implode("\n", $warnings) . "\n\n" : "") .
+            \WP_CLI::colorize("Continue with pull from %Y'$env'%n to %G'local'%n?")
         );
 
         // Run before_pull commands
         if (isset($config['before_pull']) && is_array($config['before_pull'])) {
-            \WP_CLI::log('- Running before_pull commands');
+            \WP_CLI::line();
+            \WP_CLI::log('━━━ Running Before Pull Commands ━━━');
             \WpSync\Helpers::runCustomCommands($config['before_pull'], $ssh_flag, $skip_flag);
+            \WP_CLI::log('');
         }
 
         if ($config['db_backup']) {
@@ -142,7 +163,8 @@ class Pull
 
             \WP_CLI::runcommand("db export $backupsPath/$backupFileName $skip_flag");
 
-            \WP_CLI::log("- Database backup saved to $backupsPath/$backupFileName\n");
+            \WP_CLI::success("Database backup saved to $backupsPath/$backupFileName");
+            \WP_CLI::log('');
         }
 
 
@@ -153,7 +175,9 @@ class Pull
             $path_from = "$host:$path/wp-content/uploads/";
             $path_to = ABSPATH . 'wp-content/uploads/';
 
-            \WP_CLI::log('- Transferring uploads folder.');
+            \WP_CLI::line();
+            \WP_CLI::log('━━━ Transferring Files ━━━');
+            \WP_CLI::log('• Syncing uploads folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -168,7 +192,7 @@ class Pull
             $path_from = "$host:$path/wp-content/plugins/";
             $path_to = ABSPATH . 'wp-content/plugins/';
 
-            \WP_CLI::log('- Transferring plugins folder.');
+            \WP_CLI::log('• Syncing plugins folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -179,7 +203,7 @@ class Pull
             $path_from = "$host:$path/wp-content/mu-plugins/";
             $path_to = ABSPATH . 'wp-content/mu-plugins/';
 
-            \WP_CLI::log('- Transferring mu-plugins folder.');
+            \WP_CLI::log('• Syncing mu-plugins folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
                 $path_to,
@@ -194,7 +218,7 @@ class Pull
             $path_from = "$host:$path/wp-content/themes/";
             $path_to = ABSPATH . 'wp-content/themes/';
 
-            \WP_CLI::log('- Transferring themes folder.');
+            \WP_CLI::log('• Syncing themes folder...');
 
             \WpSync\Helpers::syncFiles(
                 $path_from,
@@ -236,30 +260,37 @@ class Pull
             // Export the remote database
             $db_sync_file = ABSPATH . 'wp-sync-temp.sql';
 
-            \WP_CLI::log("- Exporting $env database\n");
+            \WP_CLI::line();
+            \WP_CLI::log(\WP_CLI::colorize('%B%G━━━ Syncing Database ━━━%n'));
+            \WP_CLI::log(\WP_CLI::colorize("%C•%n Exporting database from %Y$env%n..."));
             // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
 
             \WP_CLI::runcommand("$ssh_flag db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
 
             // Import into local DB
-            \WP_CLI::log('- Importing database.');
+            \WP_CLI::log(\WP_CLI::colorize('%C•%n Importing database...'));
             \WP_CLI::runcommand("db import \"$db_sync_file\" $skip_flag");
 
             // Remove temporary sync file
             unlink($db_sync_file);
 
             // Search and replace domains
-            \WP_CLI::log('- Replacing domains and setting home and siteurl.');
-            
+            \WP_CLI::log(\WP_CLI::colorize('%C•%n Updating domains and URLs...'));
+
             // Check if this is a multisite installation
             if (\WpSync\Helpers::isMultisite('', $skip_flag)) {
-                \WP_CLI::log('- Multisite installation detected, using network-aware search-replace');
-                \WpSync\Helpers::performMultisiteSearchReplace($remote_domain, $local_domain, '', $skip_flag);
+                \WP_CLI::log(\WP_CLI::colorize('%C•%n %MMultisite%n installation detected, using network-aware search-replace'));
+                \WpSync\Helpers::performMultisiteSearchReplace($remote_domain, $local_domain, $config, '', $skip_flag);
             } else {
                 \WP_CLI::runcommand("$skip_flag option update home '$local_domain' $skip_flag");
                 \WP_CLI::runcommand("$skip_flag option update siteurl '$local_domain' $skip_flag");
-                \WP_CLI::runcommand("$skip_flag search-replace $remote_domain $local_domain $skip_flag");
+                $quiet_flag = !empty($config['verbose']) ? '' : '--quiet';
+                \WP_CLI::runcommand("$skip_flag search-replace $remote_domain $local_domain --all-tables $quiet_flag $skip_flag");
+
+                // Process additional search-replace operations for single site
+                \WpSync\Helpers::processAdditionalSearchReplace($config, '', $skip_flag);
             }
+            \WP_CLI::log('');
         }
 
         // TODO set up custom search and replace
@@ -296,28 +327,31 @@ class Pull
         // }
 
         if ($config['load_media_from_remote']) {
-            \WP_CLI::log('- Set site to load media from remote using BE Media from Remote');
+            \WP_CLI::log(\WP_CLI::colorize('%B%M━━━ Configuring Remote Media Loading ━━━%n'));
+            \WP_CLI::log(\WP_CLI::colorize('%C•%n Installing %BBE Media from Production%n plugin...'));
 
             // Install and activate be-media-from-production plugin
             \WP_CLI::runcommand("plugin install https://github.com/billerickson/be-media-from-production/archive/master.zip --force --activate $skip_flag");
-            
+
             // Configure media from remote for multisite or single site
             if (\WpSync\Helpers::isMultisite('', $skip_flag)) {
-                \WP_CLI::log('- Configuring media from remote for multisite network');
-                
+                \WP_CLI::log(\WP_CLI::colorize('%C•%n Configuring media from remote for %Mmultisite%n network...'));
+
                 // Network activate the plugin for all sites
                 \WP_CLI::runcommand("plugin activate be-media-from-production --network $skip_flag");
-                
+
                 // For multisite, the plugin can work with a single constant
                 // The plugin should be smart enough to handle multisite URLs
                 \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
-                
-                \WP_CLI::log("- Configured network-wide media from remote: $local_domain -> $remote_domain");
-                \WP_CLI::log("- Note: BE Media from Production will automatically handle subdomain/subdirectory mappings");
+
+                \WP_CLI::success(\WP_CLI::colorize("%G✓%n Configured network-wide media from remote: %G$local_domain%n %B->%n %Y$remote_domain%n"));
+                \WP_CLI::log("  Note: BE Media from Production will automatically handle subdomain/subdirectory mappings");
             } else {
                 // Single site configuration
                 \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
+                \WP_CLI::success(\WP_CLI::colorize("%G✓%n Configured media from remote: %G$local_domain%n %B->%n %Y$remote_domain%n"));
             }
+            \WP_CLI::log('');
 
             //TODO allow remote media domain to be overriden in config
         }
@@ -326,14 +360,20 @@ class Pull
 
         //TODO add ability to run arbitrary commands after sync
 
+        \WP_CLI::log(\WP_CLI::colorize('%B%C━━━ Finalizing Sync ━━━%n'));
+        \WP_CLI::log(\WP_CLI::colorize('%C•%n Flushing rewrite rules...'));
         \WP_CLI::runcommand("rewrite flush");
 
         // Run after_pull commands
         if (isset($config['after_pull']) && is_array($config['after_pull'])) {
-            \WP_CLI::log('- Running after_pull commands');
+            \WP_CLI::line();
+            \WP_CLI::log('━━━ Running After Pull Commands ━━━');
             \WpSync\Helpers::runCustomCommands($config['after_pull'], $ssh_flag, $skip_flag);
         }
 
-        \WP_CLI::success("Sync completed successfully.");
+        \WP_CLI::line();
+        \WP_CLI::log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        \WP_CLI::success("🎉 Pull from '$env' to 'local' completed successfully!");
+        \WP_CLI::log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
 }
