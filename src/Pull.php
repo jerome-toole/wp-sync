@@ -118,6 +118,12 @@ class Pull
             "Continue?"
         );
 
+        // Run before_pull commands
+        if (isset($config['before_pull']) && is_array($config['before_pull'])) {
+            \WP_CLI::log('- Running before_pull commands');
+            \WpSync\Helpers::runCustomCommands($config['before_pull'], $ssh_flag, $skip_flag);
+        }
+
         if ($config['db_backup']) {
             // TODO secure the backups directory
 
@@ -244,9 +250,16 @@ class Pull
 
             // Search and replace domains
             \WP_CLI::log('- Replacing domains and setting home and siteurl.');
-            \WP_CLI::runcommand("$skip_flag option update home '$local_domain' $skip_flag");
-            \WP_CLI::runcommand("$skip_flag option update siteurl '$local_domain' $skip_flag");
-            \WP_CLI::runcommand("$skip_flag search-replace $remote_domain $local_domain $skip_flag");
+            
+            // Check if this is a multisite installation
+            if (\WpSync\Helpers::isMultisite('', $skip_flag)) {
+                \WP_CLI::log('- Multisite installation detected, using network-aware search-replace');
+                \WpSync\Helpers::performMultisiteSearchReplace($remote_domain, $local_domain, '', $skip_flag);
+            } else {
+                \WP_CLI::runcommand("$skip_flag option update home '$local_domain' $skip_flag");
+                \WP_CLI::runcommand("$skip_flag option update siteurl '$local_domain' $skip_flag");
+                \WP_CLI::runcommand("$skip_flag search-replace $remote_domain $local_domain $skip_flag");
+            }
         }
 
         // TODO set up custom search and replace
@@ -286,8 +299,25 @@ class Pull
             \WP_CLI::log('- Set site to load media from remote using BE Media from Remote');
 
             // Install and activate be-media-from-production plugin
-            \WP_CLI::runcommand("plugin install --activate be-media-from-production $skip_flag");
-            \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
+            \WP_CLI::runcommand("plugin install https://github.com/billerickson/be-media-from-production/archive/master.zip --force --activate $skip_flag");
+            
+            // Configure media from remote for multisite or single site
+            if (\WpSync\Helpers::isMultisite('', $skip_flag)) {
+                \WP_CLI::log('- Configuring media from remote for multisite network');
+                
+                // Network activate the plugin for all sites
+                \WP_CLI::runcommand("plugin activate be-media-from-production --network $skip_flag");
+                
+                // For multisite, the plugin can work with a single constant
+                // The plugin should be smart enough to handle multisite URLs
+                \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
+                
+                \WP_CLI::log("- Configured network-wide media from remote: $local_domain -> $remote_domain");
+                \WP_CLI::log("- Note: BE Media from Production will automatically handle subdomain/subdirectory mappings");
+            } else {
+                // Single site configuration
+                \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
+            }
 
             //TODO allow remote media domain to be overriden in config
         }
@@ -297,6 +327,13 @@ class Pull
         //TODO add ability to run arbitrary commands after sync
 
         \WP_CLI::runcommand("rewrite flush");
+
+        // Run after_pull commands
+        if (isset($config['after_pull']) && is_array($config['after_pull'])) {
+            \WP_CLI::log('- Running after_pull commands');
+            \WpSync\Helpers::runCustomCommands($config['after_pull'], $ssh_flag, $skip_flag);
+        }
+
         \WP_CLI::success("Sync completed successfully.");
     }
 }

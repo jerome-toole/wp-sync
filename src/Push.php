@@ -84,6 +84,7 @@ class Push
         if (isset($config['url'])) {
             $remote_domain = $config['url'];
         } else {
+            \WP_CLI::Log("$ssh_flag option get home $skip_flag", ['return' => true]);
             $remote_domain = \WP_CLI::runcommand("$ssh_flag option get home $skip_flag", ['return' => true]);
             \WP_CLI::Log("Set remote domain ($remote_domain) from remote site options.");
         }
@@ -106,6 +107,12 @@ class Push
             "Remote domain:\n$remote_domain.\n\n" .
             "Continue?"
         );
+
+        // Run before_push commands
+        if (isset($config['before_push']) && is_array($config['before_push'])) {
+            \WP_CLI::log('- Running before_push commands');
+            \WpSync\Helpers::runCustomCommands($config['before_push'], $ssh_flag, $skip_flag);
+        }
 
         // if ($config['db_backup']) {
         //     $host = rtrim($config['host'], '/');
@@ -209,9 +216,16 @@ class Push
 
             // Search and replace domains
             \WP_CLI::log('- Replacing domains and setting home and siteurl.');
-            \WP_CLI::runcommand("$ssh_flag option update home '$remote_domain' $skip_flag");
-            \WP_CLI::runcommand("$ssh_flag option update siteurl '$remote_domain' $skip_flag");
-            \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain $skip_flag");
+            
+            // Check if this is a multisite installation
+            if (\WpSync\Helpers::isMultisite($ssh_flag, $skip_flag)) {
+                \WP_CLI::log('- Multisite installation detected, using network-aware search-replace');
+                \WpSync\Helpers::performMultisiteSearchReplace($local_domain, $remote_domain, $ssh_flag, $skip_flag);
+            } else {
+                \WP_CLI::runcommand("$ssh_flag option update home '$remote_domain' $skip_flag");
+                \WP_CLI::runcommand("$ssh_flag option update siteurl '$remote_domain' $skip_flag");
+                \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain $skip_flag");
+            }
         }
 
         // TODO set up custom search and replace
@@ -252,7 +266,7 @@ class Push
         //     \WP_CLI::log('- Set site to load media from remote using BE Media from Remote');
 
         //     // Install and activate be-media-from-production plugin
-        //     \WP_CLI::runcommand("plugin install --activate be-media-from-production $skip_flag");
+        //     \WP_CLI::runcommand("plugin install https://github.com/billerickson/be-media-from-production/archive/master.zip --force --activate $skip_flag");
         //     \WP_CLI::runcommand("config set BE_MEDIA_FROM_PRODUCTION_URL \"$remote_domain\" --type=constant $skip_flag");
 
         //     //TODO allow remote media domain to be overriden in config
@@ -265,6 +279,13 @@ class Push
         //TODO add ability to run arbitrary commands after sync
 
         \WP_CLI::runcommand("$ssh_flag rewrite flush");
+
+        // Run after_push commands
+        if (isset($config['after_push']) && is_array($config['after_push'])) {
+            \WP_CLI::log('- Running after_push commands');
+            \WpSync\Helpers::runCustomCommands($config['after_push'], $ssh_flag, $skip_flag);
+        }
+
         \WP_CLI::success("Sync completed successfully.");
     }
 }

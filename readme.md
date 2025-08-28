@@ -1,6 +1,6 @@
 # WP CLI Sync: Simple WordPress migrations from the command line
 
-WP CLI Sync is a WP-CLI package designed for simple CLI migrations between WordPress environments.
+WP CLI Sync is a WP-CLI package designed for single-command CLI migrations between WordPress environments.
 It provides a straightforward way to synchronize the database, themes, plugins etc. between different environments.
 
 [Installation](#installation) | [Usage](#usage) | [Options](#options)
@@ -115,6 +115,75 @@ This command is used in the same way as the pull command, but synchronizes **fro
 - `uploads`: Synchronize uploads. Default: false.
 - `db_backup`: Backup the database locally before synchronizing. Default: true.
 - `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: true.
+
+## Custom Command Hooks
+
+WP CLI Sync supports running arbitrary commands at key points during sync operations. This allows you to perform custom tasks like additional search-replace operations, cache clearing, or maintenance mode activation.
+
+### Hook Types
+- `before_pull` / `before_push`: Execute before sync operations begin
+- `after_pull` / `after_push`: Execute after sync operations complete
+
+### Configuration
+Commands can be defined at global (pull/push) or environment-specific levels:
+
+```yaml
+pull:
+  db: true
+  plugins: true
+  after_pull:
+    - "wp search-replace 'old-string' 'new-string'"
+    - "wp cache flush"
+
+environments:
+  staging:
+    before_pull:
+      - "wp maintenance-mode activate"
+    after_pull:
+      - "wp maintenance-mode deactivate"
+```
+
+### Command Types
+- **WP-CLI commands**: Start with `wp ` and are executed with appropriate skip flags
+- **Shell commands**: Any other commands are executed as shell commands
+- **Remote execution**: Commands automatically run on remote server when using SSH
+
+## WordPress Multisite Support
+
+WP CLI Sync includes comprehensive support for WordPress multisite networks:
+
+### Automatic Detection
+- Automatically detects multisite installations
+- Switches to network-aware operations when multisite is detected
+
+### Enhanced Search-Replace
+- Uses `--network` flag for network-wide search-replace operations
+- Updates `DOMAIN_CURRENT_SITE` constant in wp-config.php
+- Updates individual site domains in the database
+- Handles both subdomain and subdirectory multisite configurations
+
+### Media from Remote
+- Network-activates BE Media from Production plugin
+- Configures media loading at the network level
+- Supports both subdomain and subdirectory multisite setups
+
+### Multisite Example Configuration
+```yaml
+pull:
+  db: true
+  plugins: true
+  after_pull:
+    # Network-wide search replace
+    - "wp search-replace 'staging.example.com' 'local.example.com' --network"
+    # Flush cache on all sites
+    - "wp site list --field=url --format=csv | xargs -I {} wp --url={} cache flush"
+
+environments:
+  staging:
+    host: staging.example.com
+    path: /var/www/html
+    url: https://staging.example.com
+```
 
 ## Contributing
 Contributions are welcome. Please feel free to submit pull requests or raise issues on the GitHub repository.

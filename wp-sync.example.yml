@@ -4,12 +4,25 @@ pull:
   plugins: true
   uploads: false
   db_backup: true
+  # before_pull:
+  #   - "wp maintenance-mode activate"
+  #   - "echo 'Starting pull operation'"
+  # after_pull:
+  #   - "wp search-replace 'old-string' 'new-string'"
+  #   - "wp cache flush"
+  #   - "wp maintenance-mode deactivate"
+  # Multisite-specific example:
+  # after_pull:
+  #   - "wp search-replace 'staging-cdn.example.com' 'local-cdn.example.com' --network"
+  #   - "wp site list --field=url --format=csv | xargs -I {} wp --url={} cache flush"
 
 push:
   db: true
   themes: false
   plugins: false
   uploads: false
+  # before_push:
+  # after_push:
 
 environments:
   local:
@@ -20,9 +33,14 @@ environments:
     # port:
     # path:
     # url: <remote_url> # Optional: defaults to environment home url
+    # before_push:
+    # after_push:
+
 
   production:
     # host: <host>
     # port:
     # path:
     # url: <remote_url> # Optional: defaults to environment home url
+    # before_push:
+    # after_push:
