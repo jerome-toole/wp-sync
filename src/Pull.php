@@ -140,7 +140,7 @@ class Pull
         // Run before_pull commands
         if (isset($config['before_pull']) && is_array($config['before_pull'])) {
             \WP_CLI::line();
-            \WP_CLI::log('━━━ Running Before Pull Commands ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Running Before Pull Commands ━━━%n'));
             \WpSync\Helpers::runCustomCommands($config['before_pull'], $ssh_flag, $skip_flag);
             \WP_CLI::log('');
         }
@@ -176,7 +176,7 @@ class Pull
             $path_to = ABSPATH . 'wp-content/uploads/';
 
             \WP_CLI::line();
-            \WP_CLI::log('━━━ Transferring Files ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Transferring Files ━━━%n'));
             \WP_CLI::log('• Syncing uploads folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
@@ -261,7 +261,7 @@ class Pull
             $db_sync_file = ABSPATH . 'wp-sync-temp.sql';
 
             \WP_CLI::line();
-            \WP_CLI::log(\WP_CLI::colorize('%B%G━━━ Syncing Database ━━━%n'));
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Syncing Database ━━━%n'));
             \WP_CLI::log(\WP_CLI::colorize("%C•%n Exporting database from %Y$env%n..."));
             // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
 
@@ -327,7 +327,7 @@ class Pull
         // }
 
         if ($config['load_media_from_remote']) {
-            \WP_CLI::log(\WP_CLI::colorize('%B%M━━━ Configuring Remote Media Loading ━━━%n'));
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Configuring Remote Media Loading ━━━%n'));
             \WP_CLI::log(\WP_CLI::colorize('%C•%n Installing %BBE Media from Production%n plugin...'));
 
             // Install and activate be-media-from-production plugin
@@ -360,14 +360,14 @@ class Pull
 
         //TODO add ability to run arbitrary commands after sync
 
-        \WP_CLI::log(\WP_CLI::colorize('%B%C━━━ Finalizing Sync ━━━%n'));
+        \WP_CLI::log(\WP_CLI::colorize('%C━━━ Finalizing Sync ━━━%n'));
         \WP_CLI::log(\WP_CLI::colorize('%C•%n Flushing rewrite rules...'));
         \WP_CLI::runcommand("rewrite flush");
 
         // Run after_pull commands
         if (isset($config['after_pull']) && is_array($config['after_pull'])) {
             \WP_CLI::line();
-            \WP_CLI::log('━━━ Running After Pull Commands ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Running After Pull Commands ━━━%n'));
             \WpSync\Helpers::runCustomCommands($config['after_pull'], $ssh_flag, $skip_flag);
         }
 

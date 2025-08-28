@@ -130,7 +130,7 @@ class Push
 
         // Run before_push commands
         if (isset($config['before_push']) && is_array($config['before_push'])) {
-            \WP_CLI::log('━━━ Running Before Push Commands ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Running Before Push Commands ━━━%n'));
             \WpSync\Helpers::runCustomCommands($config['before_push'], $ssh_flag, $skip_flag);
             \WP_CLI::log('');
         }
@@ -163,7 +163,7 @@ class Push
             $path_from = ABSPATH . 'wp-content/uploads/';
             $path_to = "$host:$path/wp-content/uploads/";
 
-            \WP_CLI::log('━━━ Transferring Files ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Transferring Files ━━━%n'));
             \WP_CLI::log('• Syncing uploads folder...');
             \WpSync\Helpers::syncFiles(
                 $path_from,
@@ -233,7 +233,7 @@ class Push
         // }
 
         if ($config['db']) {
-            \WP_CLI::log('━━━ Syncing Database ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Syncing Database ━━━%n'));
             \WP_CLI::log("• Migrating local database to $env...");
             exec("wp db export - $skip_flag | $ssh_command wp db import - $skip_flag'");
 
@@ -306,13 +306,13 @@ class Push
 
         //TODO add ability to run arbitrary commands after sync
 
-        \WP_CLI::log('━━━ Finalizing Sync ━━━');
+        \WP_CLI::log(\WP_CLI::colorize('%C━━━ Finalizing Sync ━━━%n'));
         \WP_CLI::log('• Flushing rewrite rules on remote...');
         \WP_CLI::runcommand("$ssh_flag rewrite flush");
 
         // Run after_push commands
         if (isset($config['after_push']) && is_array($config['after_push'])) {
-            \WP_CLI::log('━━━ Running After Push Commands ━━━');
+            \WP_CLI::log(\WP_CLI::colorize('%C━━━ Running After Push Commands ━━━%n'));
             \WpSync\Helpers::runCustomCommands($config['after_push'], $ssh_flag, $skip_flag);
         }
 
