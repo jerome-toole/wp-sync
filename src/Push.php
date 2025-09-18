@@ -109,7 +109,7 @@ class Push
         }
         $file_operations = [];
         if ($config['themes']) $file_operations[] = 'themes';
-        if ($config['plugins']) $file_operations[] = 'plugins'; 
+        if ($config['plugins']) $file_operations[] = 'plugins';
         if ($config['uploads']) $file_operations[] = 'uploads';
         if (!empty($file_operations)) {
             $warnings[] = "   • Remote " . implode(', ', $file_operations) . " will be replaced with local files";
@@ -187,7 +187,6 @@ class Push
             );
         }
 
-        // TODO support .deployignore in a theme (maybe loop through the themes and rsync each separately?)
         if ($config['themes']) {
             $host = rtrim($config['host'], '/');
             $path = rtrim($config['path'], '/');
@@ -249,7 +248,7 @@ class Push
                 \WP_CLI::runcommand("$ssh_flag option update siteurl '$remote_domain' $skip_flag");
                 $quiet_flag = !empty($config['verbose']) ? '' : '--quiet';
                 \WP_CLI::runcommand("$ssh_flag search-replace $local_domain $remote_domain --all-tables $quiet_flag $skip_flag");
-                
+
                 // Process additional search-replace operations for single site
                 \WpSync\Helpers::processAdditionalSearchReplace($config, $ssh_flag ? "$ssh_flag " : '', $skip_flag);
             }
@@ -300,11 +299,7 @@ class Push
         //     //TODO allow remote media domain to be overriden in config
         // }
 
-        //TODO add ability to activate or deactivate plugins after sync
-
         //TODO Add push configuration.
-
-        //TODO add ability to run arbitrary commands after sync
 
         \WP_CLI::log(\WP_CLI::colorize('%C━━━ Finalizing Sync ━━━%n'));
         \WP_CLI::log('• Flushing rewrite rules on remote...');

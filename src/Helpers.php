@@ -210,7 +210,6 @@ class Helpers
             $cmd .= " --exclude-from='$deploy_ignore_path'";
         } else {
             \WP_CLI::log("no .deployignore file found in $deploy_ignore_path");
-            exit(1);
         }
 
         // \WP_CLI::error($cmd);
