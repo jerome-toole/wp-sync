@@ -77,6 +77,11 @@ class Pull
         $ssh_flag = "--ssh=" . implode('', $ssh_flag_parts);
         $skip_flag = "--skip-plugins --skip-themes";
 
+        // Add --allow-root when SSH user is root
+        if (isset($config['user']) && $config['user'] === 'root') {
+            $skip_flag .= " --allow-root";
+        }
+
         if (isset($yaml_config['environments']['local']['url'])) {
             $local_domain = $yaml_config['environments']['local']['url'];
         } else {
@@ -266,6 +271,9 @@ class Pull
             // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
 
             \WP_CLI::runcommand("$ssh_flag db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
+
+            // Remap any collations the local server can't import (e.g. MariaDB UCA-1400 -> MySQL/older MariaDB)
+            \WpSync\Helpers::normalizeDumpCollations($db_sync_file, '', $skip_flag);
 
             // Import into local DB
             \WP_CLI::log(\WP_CLI::colorize('%C•%n Importing database...'));
