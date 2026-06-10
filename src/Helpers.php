@@ -149,6 +149,111 @@ class Helpers
         return $is_multisite === '1';
     }
 
+    /**
+     * Rewrite collations in a SQL dump that the destination server can't import.
+     *
+     * MariaDB 10.10+ introduced UCA-1400 collations (e.g. utf8mb4_uca1400_ai_ci)
+     * that older MariaDB and all MySQL servers reject on import ("Unknown collation").
+     * This scans the dump for collation names, asks the destination which collations
+     * it actually supports, and remaps ONLY the unsupported ones to a same-charset
+     * equivalent that exists on the destination. The charset is never changed, so no
+     * data is lost. If the destination already supports every collation in the dump
+     * (matching environments) nothing is touched.
+     *
+     * @param string $dump_file Path to the SQL dump on the machine running wp-cli.
+     * @param string $ssh_flag  --ssh=... flag for the destination, or '' for local.
+     * @param string $skip_flag Skip flags passed to wp commands.
+     */
+    public static function normalizeDumpCollations(string $dump_file, string $ssh_flag = '', string $skip_flag = '--skip-plugins --skip-themes')
+    {
+        if (!file_exists($dump_file)) {
+            return;
+        }
+
+        // Collations referenced by the dump (streamed via grep so large dumps stay off the PHP heap).
+        $grep = 'grep -oiE ' . escapeshellarg('COLLATE[ =]+`?[a-z0-9_]+') . ' ' . escapeshellarg($dump_file);
+        exec($grep, $grep_lines);
+
+        $dump_collations = [];
+        foreach ($grep_lines as $line) {
+            if (preg_match('/([a-z0-9_]+)$/i', $line, $m)) {
+                $dump_collations[strtolower($m[1])] = true;
+            }
+        }
+        if (empty($dump_collations)) {
+            return;
+        }
+
+        // Collations the destination server actually supports.
+        $command_prefix = $ssh_flag ? "$ssh_flag " : '';
+        $show = \WP_CLI::runcommand(
+            $command_prefix . "db query 'SHOW COLLATION' --skip-column-names $skip_flag",
+            ['return' => true, 'exit_error' => false]
+        );
+
+        $supported = [];
+        foreach (preg_split('/\r?\n/', (string) $show) as $line) {
+            $token = strtolower(strtok(trim($line), " \t"));
+            if ($token !== '' && $token !== false) {
+                $supported[$token] = true;
+            }
+        }
+
+        // Bail if we couldn't read the destination's collations — better to leave the
+        // dump untouched (and let import fail loudly) than to remap blindly.
+        if (empty($supported)) {
+            return;
+        }
+
+        // Build the remap: each unsupported collation -> first same-charset fallback the
+        // destination has. Charset prefix is preserved (utf8mb4 stays utf8mb4, etc.).
+        $replacements = [];
+        foreach (array_keys($dump_collations) as $collation) {
+            if (isset($supported[$collation])) {
+                continue; // destination already has it — leave alone
+            }
+
+            if (strpos($collation, 'utf8mb4') === 0) {
+                $candidates = ['utf8mb4_unicode_ci', 'utf8mb4_general_ci'];
+            } elseif (strpos($collation, 'utf8mb3') === 0) {
+                $candidates = ['utf8mb3_general_ci', 'utf8_general_ci', 'utf8mb4_general_ci'];
+            } elseif (strpos($collation, 'utf8') === 0) {
+                $candidates = ['utf8_general_ci', 'utf8mb3_general_ci', 'utf8mb4_general_ci'];
+            } else {
+                $candidates = ['utf8mb4_general_ci', 'utf8_general_ci'];
+            }
+
+            foreach ($candidates as $fallback) {
+                if (isset($supported[$fallback]) && $fallback !== $collation) {
+                    $replacements[$collation] = $fallback;
+                    break;
+                }
+            }
+        }
+
+        if (empty($replacements)) {
+            return;
+        }
+
+        // Apply via streamed sed (portable across GNU/BSD; tokens are word-chars only).
+        $sed_exprs = '';
+        foreach ($replacements as $from => $to) {
+            \WP_CLI::log(\WP_CLI::colorize("%C•%n Remapping unsupported collation: %Y$from%n %B->%n %G$to%n"));
+            $sed_exprs .= ' -e ' . escapeshellarg("s/{$from}/{$to}/g");
+        }
+
+        $tmp = $dump_file . '.collations.tmp';
+        $sed = 'sed' . $sed_exprs . ' ' . escapeshellarg($dump_file)
+            . ' > ' . escapeshellarg($tmp)
+            . ' && mv ' . escapeshellarg($tmp) . ' ' . escapeshellarg($dump_file);
+        exec($sed, $sed_out, $sed_code);
+
+        if ($sed_code !== 0) {
+            @unlink($tmp);
+            \WP_CLI::warning('Could not remap dump collations; importing original dump.');
+        }
+    }
+
     public static function configureMultisiteMediaUrls(string $remote_domain, string $ssh_flag = '', string $skip_flag = '--skip-plugins --skip-themes')
     {
         $command_prefix = $ssh_flag ? "$ssh_flag " : '';

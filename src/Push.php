@@ -77,6 +77,11 @@ class Push
         $ssh_flag = "--ssh=" . implode('', $ssh_flag_parts);
         $skip_flag = "--skip-plugins --skip-themes";
 
+        // Add --allow-root when SSH user is root
+        if (isset($config['user']) && $config['user'] === 'root') {
+            $skip_flag .= " --allow-root";
+        }
+
         if (isset($yaml_config['environments']['local']['url'])) {
             $local_domain = $yaml_config['environments']['local']['url'];
         } else {
@@ -185,6 +190,17 @@ class Push
                 $path_to,
                 $config
             );
+
+            // mu-plugins
+            $path_from = ABSPATH . 'wp-content/mu-plugins/';
+            $path_to = "$host:$path/wp-content/mu-plugins/";
+
+            \WP_CLI::log('• Syncing mu-plugins folder...');
+            \WpSync\Helpers::syncFiles(
+                $path_from,
+                $path_to,
+                $config
+            );
         }
 
         if ($config['themes']) {
@@ -233,8 +249,22 @@ class Push
 
         if ($config['db']) {
             \WP_CLI::log(\WP_CLI::colorize('%C━━━ Syncing Database ━━━%n'));
-            \WP_CLI::log("• Migrating local database to $env...");
-            exec("wp db export - $skip_flag | $ssh_command wp db import - $skip_flag'");
+
+            // Export to a local temp file so the dump can be sanitised before it reaches the remote.
+            $db_sync_file = ABSPATH . 'wp-sync-temp.sql';
+
+            \WP_CLI::log("• Exporting local database...");
+            \WP_CLI::runcommand("db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
+
+            // Remap any collations the remote server can't import (e.g. MariaDB UCA-1400 -> MySQL/older MariaDB)
+            \WpSync\Helpers::normalizeDumpCollations($db_sync_file, $ssh_flag, $skip_flag);
+
+            // Stream the local dump into the remote import over SSH.
+            \WP_CLI::log("• Importing database into $env...");
+            exec("$ssh_command wp db import - $skip_flag' < \"$db_sync_file\"");
+
+            // Remove temporary sync file
+            unlink($db_sync_file);
 
             // Search and replace domains
             \WP_CLI::log('• Updating domains and URLs...');
