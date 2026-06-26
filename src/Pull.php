@@ -270,7 +270,7 @@ class Pull
             \WP_CLI::log(\WP_CLI::colorize("%C•%n Exporting database from %Y$env%n..."));
             // \WP_CLI::runcommand("$ssh_flag db export $exclude_string - > \"$db_sync_file\"");
 
-            \WP_CLI::runcommand("$ssh_flag db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
+            \WP_CLI::runcommand("$ssh_flag db export --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
 
             // Remap any collations the local server can't import (e.g. MariaDB UCA-1400 -> MySQL/older MariaDB)
             \WpSync\Helpers::normalizeDumpCollations($db_sync_file, '', $skip_flag);

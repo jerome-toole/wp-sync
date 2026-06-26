@@ -254,7 +254,7 @@ class Push
             $db_sync_file = ABSPATH . 'wp-sync-temp.sql';
 
             \WP_CLI::log("• Exporting local database...");
-            \WP_CLI::runcommand("db export --all-tablespaces --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
+            \WP_CLI::runcommand("db export --single-transaction --quick --lock-tables=false $skip_flag - > \"$db_sync_file\"");
 
             // Remap any collations the remote server can't import (e.g. MariaDB UCA-1400 -> MySQL/older MariaDB)
             \WpSync\Helpers::normalizeDumpCollations($db_sync_file, $ssh_flag, $skip_flag);
