@@ -3,7 +3,37 @@
 WP CLI Sync is a WP-CLI package designed for single-command CLI migrations between WordPress environments.
 It provides a straightforward way to synchronize the database, themes, plugins etc. between different environments.
 
-[Installation](#installation) | [Usage](#usage) | [Options](#options)
+[Quick start](#quick-start) | [Installation](#installation) | [Usage](#usage) | [Options](#options)
+
+## Quick start
+
+1. **Install the package** (once per machine):
+   ```bash
+   wp package install https://github.com/jerome-toole/wp-sync.git
+   ```
+
+2. **Create a config file** in your project folder — this can be your WordPress root or your theme, as long as you run the command from there:
+   ```bash
+   wp sync init
+   ```
+   This creates a `wp-sync.yml` file in the current directory.
+
+3. **Add your server details.** Open `wp-sync.yml` and fill in an environment. You only need two things: a way to reach the server (an SSH alias or a hostname/IP) and the path to the WordPress installation on it:
+   ```yaml
+   environments:
+     staging:
+       host: my-staging-alias    # ~/.ssh/config alias, or a hostname/IP
+       path: /path/to/wordpress  # remote WordPress root
+       url: https://staging.example.com
+   ```
+   Using an `~/.ssh/config` alias is recommended — see [Connecting to your environments](#connecting-to-your-environments).
+
+4. **Choose what to sync** in the `pull:` block (`db`, `themes`, `plugins`, `uploads`), check your settings are correct, then run:
+   ```bash
+   wp sync pull staging
+   ```
+
+That's it. `pull` copies the chosen parts of the remote environment down to your local site, backing up your local database first by default. Use [`wp sync push`](#push-command) to go the other way.
 
 ### Example:
 Setup your wp-sync.yml file:
@@ -15,10 +45,8 @@ pull:
 
 environments:
   staging:
-    user: user
-    host: staging-server-ip
+    host: my-staging-alias   # an ~/.ssh/config alias, or a hostname/IP
     path: /path/to/wordpress
-    ssh: user@staging-server-ip/path/to/wordpress
     url: http://staging.example.com
 ```
 
@@ -75,18 +103,56 @@ environments:
     url: http://local.example.com
 
   staging:
-    user: user
-    host: staging-server-ip
+    # Reference an ~/.ssh/config alias; user/port/key come from there.
+    host: my-staging-alias
     path: /path/to/wordpress
-    ssh: user@staging-server-ip/path/to/wordpress
     url: http://staging.example.com
 
   production:
-    user: user
+    # Or set an explicit host with user/port as separate keys.
     host: production-server-ip
+    user: user
+    port: 22
     path: /path/to/wordpress
     url: http://production.example.com
 ```
+
+### Connecting to your environments
+`host` is the SSH destination used by `ssh`, `rsync` and WP-CLI's `--ssh` flag, so it should be an `~/.ssh/config` alias, a hostname, or an IP — not a `user@host:port` string. Keep the user and port as separate keys (see below). There are two ways to configure a connection:
+
+**1. SSH config alias (recommended).** Define the connection once in `~/.ssh/config`:
+
+```
+Host my-staging-alias
+    HostName 203.0.113.10
+    User deploy
+    Port 2222
+    IdentityFile ~/.ssh/deploy_key
+```
+
+then reference it by name:
+
+```yaml
+staging:
+  host: my-staging-alias
+  path: /path/to/wordpress
+```
+
+`user`, `port` and the identity key all come from `~/.ssh/config`, so leave `user`/`port` out of `wp-sync.yml`. Setting them here overrides the alias, which is usually not what you want.
+
+Using an alias also keeps the server IP, user and port out of `wp-sync.yml`, so the file can be committed to git without exposing your infrastructure. The connection details live in each collaborator's own `~/.ssh/config`, so everyone on the team defines the same alias name locally. (Your `url` and the SSH key are unaffected either way — the key is never stored in `wp-sync.yml`.)
+
+**2. Explicit host.** Give a hostname or IP, with `user` and `port` as **separate** keys:
+
+```yaml
+staging:
+  host: staging-server-ip
+  user: user   # optional
+  port: 22     # optional
+  path: /path/to/wordpress
+```
+
+Don't combine them into the `host` value (e.g. `user@host:2222`). A bare `user@host` works, but an embedded `:port` breaks file transfers — `port` must be its own key. `path` (the remote WordPress root) is always required.
 
 ### Commands
 #### Pull
