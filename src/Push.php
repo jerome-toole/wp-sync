@@ -67,14 +67,13 @@ class Push
         $ssh_flag_parts = [
             'host' => $config['host'],
             'port' => null,
-            'path' => $config['path'],
         ];
 
         if (isset($config['port'])) {
             $ssh_flag_parts['port'] = ':' . $config['port'];
         }
 
-        $ssh_flag = "--ssh=" . implode('', $ssh_flag_parts);
+        $ssh_flag = "--ssh=" . implode('', $ssh_flag_parts) . " --path=" . $config['path'];
         $skip_flag = "--skip-plugins --skip-themes";
 
         // Add --allow-root when SSH user is root
