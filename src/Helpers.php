@@ -32,7 +32,7 @@ class Helpers
             'themes' => false,
             'uploads' => false,
             'db_backup' => true,
-            'backup_count' => 2,
+            'db_backup_count' => 3,
             'load_media_from_remote' => true,
             'additional_search_replace' => [],
             'verbose' => false,
@@ -401,7 +401,7 @@ class Helpers
         // Optional settings
         $optional_settings = [
             'db_backup' => 'Database Backup',
-            'backup_count' => 'Backups Kept',
+            'db_backup_count' => 'Backups Kept',
             'load_media_from_remote' => 'Load Media from Remote',
             'verbose' => 'Verbose Output'
         ];
@@ -451,7 +451,7 @@ class Helpers
      * @param string $skip_flag    WP-CLI skip flags to pass through.
      * @param int    $keep         Number of backups to retain per source (older ones are pruned).
      */
-    public static function backupDatabase(string $source_label, string $ssh_flag, string $skip_flag, int $keep = 2): void
+    public static function backupDatabase(string $source_label, string $ssh_flag, string $skip_flag, int $keep = 3): void
     {
         $backupsPath = WP_CONTENT_DIR . '/wp-sync-backups';
         $backupFile = "$backupsPath/wp_sync_backup_{$source_label}_" . date('Ymd_His') . ".sql";
@@ -468,6 +468,8 @@ class Helpers
         if (!is_writable($backupsPath)) {
             \WP_CLI::error("The backups directory is not writable: $backupsPath");
         }
+
+        \WP_CLI::log("Backing up {$source_label} database…");
 
         if (empty($ssh_flag)) {
             // Local export writes straight to the file.

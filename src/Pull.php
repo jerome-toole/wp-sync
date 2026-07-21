@@ -22,8 +22,8 @@ class Pull
      * [--db_backup=<true|false>]
      * : Whether to backup the local database before syncing.
      *
-     * [--backup_count=<number>]
-     * : Number of backups to keep per environment. Older ones are pruned. Default 2.
+     * [--db_backup_count=<number>]
+     * : Number of backups to keep per environment. Older ones are pruned. Default 3.
      *
      * [--verbose]
      * : Show detailed search-replace output tables.
@@ -53,9 +53,12 @@ class Pull
             \WP_CLI::error("The 'host' and 'path' setting must be provided in wp-sync.yml or as a CLI flag");
         }
 
+        // Deprecated: 'user' as a separate key. Fold it into host as user@host.
         if (isset($config['user'])) {
-            // TODO separate user and host so that host doesn't get overwritten
-            $config['host'] = $config['user'] . '@' . $config['host'];
+            \WP_CLI::warning("The 'user' option is deprecated. Use 'host: {$config['user']}@{$config['host']}' instead.");
+            if (strpos($config['host'], '@') === false) {
+                $config['host'] = $config['user'] . '@' . $config['host'];
+            }
         }
 
         // String for non-wp-cli ssh commands
@@ -79,8 +82,11 @@ class Pull
         $ssh_flag = "--ssh=" . implode('', $ssh_flag_parts) . " --path=" . $config['path'];
         $skip_flag = "--skip-plugins --skip-themes";
 
-        // Add --allow-root when SSH user is root
-        if (isset($config['user']) && $config['user'] === 'root') {
+        // Add --allow-root when SSH user is root (parsed from user@host)
+        $ssh_user = strpos($config['host'], '@') !== false
+            ? explode('@', $config['host'])[0]
+            : null;
+        if ($ssh_user === 'root') {
             $skip_flag .= " --allow-root";
         }
 
@@ -154,7 +160,7 @@ class Pull
 
         if ($config['db_backup']) {
             // Pull overwrites local — back up the local database.
-            \WpSync\Helpers::backupDatabase('local', '', $skip_flag, (int) $config['backup_count']);
+            \WpSync\Helpers::backupDatabase('local', '', $skip_flag, (int) $config['db_backup_count']);
             \WP_CLI::log('');
         }
 

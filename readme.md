@@ -3,7 +3,7 @@
 WP CLI Sync is a WP-CLI package designed for single-command CLI migrations between WordPress environments.
 It provides a straightforward way to synchronize the database, themes, plugins etc. between different environments.
 
-[Quick start](#quick-start) | [Installation](#installation) | [Usage](#usage) | [Options](#options)
+[Quick start](#quick-start) | [Installation](#installation) | [Configuration](#configuration) | [Commands](#commands) | [Options](#options)
 
 ## Quick start
 
@@ -33,53 +33,19 @@ It provides a straightforward way to synchronize the database, themes, plugins e
    wp sync pull staging
    ```
 
-That's it. `pull` copies the chosen parts of the remote environment down to your local site, backing up your local database first by default. Use [`wp sync push`](#push-command) to go the other way.
-
-### Example:
-Setup your wp-sync.yml file:
-```yaml
-# wp-sync.yml
-pull:
-  db: true
-  plugins: true
-
-environments:
-  staging:
-    host: my-staging-alias   # an ~/.ssh/config alias, or a hostname/IP
-    path: /path/to/wordpress
-    url: http://staging.example.com
-```
-
-Then run:
-```bash
-$ wp sync pull staging
-```
-
-What this does:
-- Backs up the database locally before doing anything.
-- Downloads and rewrites the database from staging.
-- Loads media from staging if it doesn't exist locally.
+That's it. `pull` copies the chosen parts of the remote environment down to your local site, backing up your local database first by default. Use [`wp sync push`](#push) to go the other way.
 
 ## Installation
-
-### Requirements
-- [WP-CLI](https://make.wordpress.org/cli/handbook/guides/installing/) installed on each environment you want to sync.
-- SSH access to all environments.
-
-Install WP CLI Sync using `wp package install`:
+Requires [WP-CLI](https://make.wordpress.org/cli/handbook/guides/installing/) and SSH access on every environment you sync. Install the package with:
 
 ```bash
 wp package install https://github.com/jerome-toole/wp-sync.git
 ```
 
-## Usage
-### Set up your wp-sync.yml file
-WP CLI Sync requires a wp-sync.yml file in your WordPress project. It can be in the root directory or in a
-sub-directory such as a theme. Run the command from the same directory as your wp-sync.yml file.
+## Configuration
+Your `wp-sync.yml` holds the settings for each command and the connection details for each environment. Run `wp sync` commands from the directory that contains it — your WordPress root or a theme.
 
-This file contains the configuration for each command and the access details for your environments.
-
-Here's an example configuration:
+Here's a complete example showing the defaults:
 ```yaml
 # wp-sync.yml
 pull:
@@ -88,16 +54,16 @@ pull:
   plugins: true
   uploads: false
   db_backup: true
-  backup_count: 2
+  db_backup_count: 3
   load_media_from_remote: true
 
 push:
-  db: true
+  db: false
   themes: false
   plugins: true
   uploads: false
   db_backup: true
-  backup_count: 2
+  db_backup_count: 3
   load_media_from_remote: false
 
 environments:
@@ -111,16 +77,15 @@ environments:
     url: http://staging.example.com
 
   production:
-    # Or set an explicit host with user/port as separate keys.
-    host: production-server-ip
-    user: user
+    # Or set an explicit host in user@host form, with port as a separate key.
+    host: user@production-server-ip
     port: 22
     path: /path/to/wordpress
     url: http://production.example.com
 ```
 
 ### Connecting to your environments
-`host` is the SSH destination used by `ssh`, `rsync` and WP-CLI's `--ssh` flag, so it should be an `~/.ssh/config` alias, a hostname, or an IP — not a `user@host:port` string. Keep the user and port as separate keys (see below). There are two ways to configure a connection:
+`host` is the SSH destination passed to `ssh`, `rsync` and WP-CLI's `--ssh` flag — use an `~/.ssh/config` alias, a hostname, or an IP. There are two ways to configure a connection:
 
 **1. SSH config alias (recommended).** Define the connection once in `~/.ssh/config`:
 
@@ -140,24 +105,25 @@ staging:
   path: /path/to/wordpress
 ```
 
-`user`, `port` and the identity key all come from `~/.ssh/config`, so leave `user`/`port` out of `wp-sync.yml`. Setting them here overrides the alias, which is usually not what you want.
+`user`, `port` and the identity key all come from `~/.ssh/config`, so leave `port` out of `wp-sync.yml`. Setting it here overrides the alias, which is usually not what you want.
 
-Using an alias also keeps the server IP, user and port out of `wp-sync.yml`, so the file can be committed to git without exposing your infrastructure. The connection details live in each collaborator's own `~/.ssh/config`, so everyone on the team defines the same alias name locally. (Your `url` and the SSH key are unaffected either way — the key is never stored in `wp-sync.yml`.)
+It also keeps server details out of `wp-sync.yml`, so the file is safe to commit to git — each collaborator defines the same alias in their own `~/.ssh/config`.
 
-**2. Explicit host.** Give a hostname or IP, with `user` and `port` as **separate** keys:
+**2. Explicit host.** Give a hostname or IP in `user@host` form, with `port` as a **separate** key:
 
 ```yaml
 staging:
-  host: staging-server-ip
-  user: user   # optional
-  port: 22     # optional
+  host: user@staging-server-ip   # user@ optional
+  port: 22                       # optional
   path: /path/to/wordpress
 ```
 
-Don't combine them into the `host` value (e.g. `user@host:2222`). A bare `user@host` works, but an embedded `:port` breaks file transfers — `port` must be its own key. `path` (the remote WordPress root) is always required.
+Don't fold `port` into `host` (e.g. `user@host:2222`) — an embedded `:port` breaks file transfers. Set it as a separate `port` key. `path` (the remote WordPress root) is always required.
 
-### Commands
-#### Pull
+> **Deprecated:** the separate `user` key still works but emits a warning — use `host: user@host` instead. When the SSH user is `root`, wp-sync automatically adds `--allow-root` to remote WP-CLI calls.
+
+## Commands
+### Pull
 `wp sync pull` synchronizes your WordPress environment from a specified environment.
 
 `wp sync pull <env> <options>`
@@ -170,7 +136,7 @@ Here's an example using option flags:
 wp sync pull staging --db=true --load_media_from_remote=true
 ```
 
-#### Push Command
+### Push
 `wp sync push` synchronizes your local WordPress environment to a specified environment.
 
 This command is used in the same way as the pull command, but synchronizes **from** your local environment **to** another environment.
@@ -182,7 +148,7 @@ This command is used in the same way as the pull command, but synchronizes **fro
 - `plugins`: Synchronize plugins. Default: false.
 - `uploads`: Synchronize uploads. Default: false.
 - `db_backup`: Back up the database that is about to be overwritten before synchronizing. See [Database Backups](#database-backups). Default: true.
-- `backup_count`: Number of backups to keep per environment. Older backups are pruned automatically. Default: 2.
+- `db_backup_count`: Number of backups to keep per environment. Older backups are pruned automatically. Default: 3.
 - `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: true.
 
 ### Database Backups
@@ -195,7 +161,7 @@ Backups are always stored **locally** in `wp-content/wp-sync-backups`, named `wp
 
 For security, the backup directory is created with `0700` permissions and includes `.htaccess` / `index.php` files to block web access to the dumps.
 
-Only the newest `backup_count` backups are kept **per environment** (e.g. 2 `local` and 2 `staging`); older ones are pruned after each backup. Restore a backup with `wp db import`:
+Only the newest `db_backup_count` backups are kept **per environment** (e.g. 3 `local` and 3 `staging`); older ones are pruned after each backup. Restore a backup with `wp db import`:
 ```bash
 wp db import wp-content/wp-sync-backups/wp_sync_backup_local_20260721_143000.sql
 ```
@@ -208,7 +174,7 @@ WP CLI Sync supports running arbitrary commands at key points during sync operat
 - `before_pull` / `before_push`: Execute before sync operations begin
 - `after_pull` / `after_push`: Execute after sync operations complete
 
-### Configuration
+### Defining Hooks
 Commands can be defined at global (pull/push) or environment-specific levels:
 
 ```yaml
@@ -234,24 +200,13 @@ environments:
 
 ## WordPress Multisite Support
 
-WP CLI Sync includes comprehensive support for WordPress multisite networks:
+Multisite networks are detected automatically and handled without extra configuration:
 
-### Automatic Detection
-- Automatically detects multisite installations
-- Switches to network-aware operations when multisite is detected
+- Runs search-replace network-wide (`--network`), updating the `DOMAIN_CURRENT_SITE` constant and each site's domain in the database.
+- Network-activates BE Media from Production and configures media loading per site.
+- Works with both subdomain and subdirectory networks.
 
-### Enhanced Search-Replace
-- Uses `--network` flag for network-wide search-replace operations
-- Updates `DOMAIN_CURRENT_SITE` constant in wp-config.php
-- Updates individual site domains in the database
-- Handles both subdomain and subdirectory multisite configurations
-
-### Media from Remote
-- Network-activates BE Media from Production plugin
-- Configures media loading at the network level
-- Supports both subdomain and subdirectory multisite setups
-
-### Multisite Example Configuration
+Example config:
 ```yaml
 pull:
   db: true
