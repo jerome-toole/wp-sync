@@ -7,10 +7,9 @@ pull:
   backup_count: 2 # Number of backups to keep per environment
   # before_pull:
   #   - "wp maintenance-mode activate"
-  #   - "echo 'Starting pull operation'"
   # after_pull:
   #   - "wp search-replace 'old-string' 'new-string'"
-  #   - "wp cache flush"
+  #   - "wp plugin deactivate some-plugin"
   #   - "wp maintenance-mode deactivate"
   # Multisite-specific example:
   # after_pull:
@@ -18,7 +17,7 @@ pull:
   #   - "wp site list --field=url --format=csv | xargs -I {} wp --url={} cache flush"
 
 push:
-  db: true
+  db: false
   themes: false
   plugins: false
   uploads: false
@@ -28,22 +27,31 @@ push:
   # after_push:
 
 environments:
-  local:
-    # url: <local_url> # Optional: defaults to current home url
-
   staging:
-    # host: <host>
-    # port:
-    # path:
-    # url: <remote_url> # Optional: defaults to environment home url
+    # Connection details. Two ways to set the host:
+    #
+    # 1. SSH config alias (recommended). Define the connection once in
+    #    ~/.ssh/config and reference it by name here. HostName, User, Port
+    #    and IdentityFile all come from ~/.ssh/config, so leave user/port out.
+    #    Bonus: keeps the server IP/user/port out of this file, so it can be
+    #    committed to git. Each collaborator defines the alias locally.
+    # host: my-staging-alias
+    #
+    # 2. Explicit host, with user/port as separate keys:
+    # host: staging-server-ip   # hostname or IP only (no user@ or :port)
+    # user: user                # optional
+    # port: 22                  # optional
+    #
+    # path: /path/to/wordpress  # required. Remote WordPress root.
+    # url: http://staging.example.com
     # before_push:
     # after_push:
 
 
   production:
-    # host: <host>
-    # port:
-    # path:
-    # url: <remote_url> # Optional: defaults to environment home url
+    # See the staging block above for the connection options.
+    # host: my-production-alias
+    # path: /path/to/wordpress
+    # url: http://production.example.com
     # before_push:
     # after_push:
