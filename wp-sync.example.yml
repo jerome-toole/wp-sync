@@ -3,7 +3,8 @@ pull:
   themes: true
   plugins: true
   uploads: false
-  db_backup: true
+  db_backup: true # Backs up the local db to wp-content/wp-sync-backups before overwriting
+  backup_count: 2 # Number of backups to keep per environment
   # before_pull:
   #   - "wp maintenance-mode activate"
   #   - "echo 'Starting pull operation'"
@@ -21,6 +22,8 @@ push:
   themes: false
   plugins: false
   uploads: false
+  db_backup: true # Backs up the remote db (saved locally) before overwriting
+  backup_count: 2 # Number of backups to keep per environment
   # before_push:
   # after_push:
 

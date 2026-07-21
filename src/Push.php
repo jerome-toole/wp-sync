@@ -20,7 +20,10 @@ class Push
      * : The environment to sync from.
      *
      * [--db_backup=<true|false>]
-     * : Whether to backup the local database before syncing.
+     * : Whether to backup the remote database (saved locally) before syncing.
+     *
+     * [--backup_count=<number>]
+     * : Number of backups to keep per environment. Older ones are pruned. Default 2.
      *
      * [--verbose]
      * : Show detailed search-replace output tables.
@@ -140,25 +143,11 @@ class Push
             \WP_CLI::log('');
         }
 
-        // if ($config['db_backup']) {
-        //     $host = rtrim($config['host'], '/');
-        //     $path = rtrim($config['path'], '/');
-        //     $backupsDirName = 'wp-sync-backups';  // TODO allow users to specify a custom backup path
-        //     $db_backup_path = ABSPATH . "$backupsDirName/";
-        //     $db_backup_name = "wp_sync_backup_{$env}_" . date('Ymd_His') . ".sql";
-
-        //     // Create the backups directory or set permissions if it already exists
-        //     if (!file_exists("$db_backup_path")) {
-        //         exec("mkdir -p -m 700 $db_backup_path");
-        //     } else {
-        //         exec("chmod 700 $db_backup_path");
-        //     }
-
-        //     // TODO set up remote backup
-        //     \WP_CLI::runcommand("$ssh_flag db export - > \"$db_backup_path/$db_backup_name\" $skip_flag");
-
-        //     \WP_CLI::log("- Database backup saved to $db_backup_path\n");
-        // }
+        if ($config['db_backup']) {
+            // Push overwrites the remote — back up the remote database locally.
+            \WpSync\Helpers::backupDatabase($env, $ssh_flag, $skip_flag, (int) $config['backup_count']);
+            \WP_CLI::log('');
+        }
 
         // TODO add default ignore string for all syncs
         if ($config['uploads']) {

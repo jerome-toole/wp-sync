@@ -32,6 +32,7 @@ class Helpers
             'themes' => false,
             'uploads' => false,
             'db_backup' => true,
+            'backup_count' => 2,
             'load_media_from_remote' => true,
             'additional_search_replace' => [],
             'verbose' => false,
@@ -400,6 +401,7 @@ class Helpers
         // Optional settings
         $optional_settings = [
             'db_backup' => 'Database Backup',
+            'backup_count' => 'Backups Kept',
             'load_media_from_remote' => 'Load Media from Remote',
             'verbose' => 'Verbose Output'
         ];
@@ -407,9 +409,13 @@ class Helpers
         $output[] = "options:";
         foreach ($optional_settings as $key => $label) {
             if (isset($config[$key])) {
-                $value = $config[$key] ? 'true' : 'false';
-                $status = $config[$key] ? \WP_CLI::colorize('%G✓%n') : \WP_CLI::colorize('%R✗%n');
-                $output[] = "  $key: $value $status";
+                if (is_bool($config[$key])) {
+                    $value = $config[$key] ? 'true' : 'false';
+                    $status = $config[$key] ? \WP_CLI::colorize('%G✓%n') : \WP_CLI::colorize('%R✗%n');
+                    $output[] = "  $key: $value $status";
+                } else {
+                    $output[] = "  $key: {$config[$key]}";
+                }
             }
         }
 
@@ -431,5 +437,74 @@ class Helpers
         }
 
         return implode("\n", $output);
+    }
+
+    /**
+     * Back up a database before it is overwritten.
+     *
+     * Backups are always stored locally in WP_CONTENT_DIR/wp-sync-backups so no
+     * dump is ever left on a remote server. For a remote source the export is
+     * streamed to stdout over SSH and written to the local file.
+     *
+     * @param string $source_label Label for the environment being backed up (e.g. 'local', 'staging').
+     * @param string $ssh_flag     The --ssh flag for a remote source, or '' for the local database.
+     * @param string $skip_flag    WP-CLI skip flags to pass through.
+     * @param int    $keep         Number of backups to retain per source (older ones are pruned).
+     */
+    public static function backupDatabase(string $source_label, string $ssh_flag, string $skip_flag, int $keep = 2): void
+    {
+        $backupsPath = WP_CONTENT_DIR . '/wp-sync-backups';
+        $backupFile = "$backupsPath/wp_sync_backup_{$source_label}_" . date('Ymd_His') . ".sql";
+
+        if (!file_exists($backupsPath)) {
+            if (!mkdir($backupsPath, 0700, true) && !is_dir($backupsPath)) {
+                \WP_CLI::error("Could not create the backups directory: $backupsPath");
+            }
+            // Defense-in-depth: block web access to database dumps in wp-content.
+            @file_put_contents("$backupsPath/.htaccess", "Require all denied\nDeny from all\n");
+            @file_put_contents("$backupsPath/index.php", "<?php // Silence is golden.\n");
+        }
+
+        if (!is_writable($backupsPath)) {
+            \WP_CLI::error("The backups directory is not writable: $backupsPath");
+        }
+
+        if (empty($ssh_flag)) {
+            // Local export writes straight to the file.
+            \WP_CLI::runcommand("db export $backupFile $skip_flag");
+        } else {
+            // Stream the remote export to stdout and save it locally — nothing is written on the remote.
+            $sql = \WP_CLI::runcommand("$ssh_flag db export - $skip_flag", ['return' => true]);
+            if (file_put_contents($backupFile, $sql) === false) {
+                \WP_CLI::error("Failed to write database backup to $backupFile");
+            }
+        }
+
+        \WP_CLI::success("Database backup saved to $backupFile");
+
+        self::pruneBackups($backupsPath, $source_label, $keep);
+    }
+
+    /**
+     * Remove old backups for a source, keeping only the newest $keep files.
+     */
+    private static function pruneBackups(string $backupsPath, string $source_label, int $keep): void
+    {
+        if ($keep < 1) {
+            return;
+        }
+
+        $files = glob("$backupsPath/wp_sync_backup_{$source_label}_*.sql");
+        if (!$files || count($files) <= $keep) {
+            return;
+        }
+
+        // Timestamped filenames sort chronologically; drop all but the newest $keep.
+        sort($files);
+        foreach (array_slice($files, 0, count($files) - $keep) as $file) {
+            if (@unlink($file)) {
+                \WP_CLI::log("• Removed old backup: " . basename($file));
+            }
+        }
     }
 }

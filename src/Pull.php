@@ -22,6 +22,9 @@ class Pull
      * [--db_backup=<true|false>]
      * : Whether to backup the local database before syncing.
      *
+     * [--backup_count=<number>]
+     * : Number of backups to keep per environment. Older ones are pruned. Default 2.
+     *
      * [--verbose]
      * : Show detailed search-replace output tables.
      * TODO Document all options
@@ -151,24 +154,8 @@ class Pull
         }
 
         if ($config['db_backup']) {
-            // TODO secure the backups directory
-
-            $path = rtrim(ABSPATH, '/');
-            $backupsDirName = 'wp-sync-backups';  // TODO allow users to specify a custom backup path
-            $backupsPath = "$path/$backupsDirName";
-            $backupFileName = "wp_sync_backup_" . date('Ymd_His') . ".sql";
-
-            if (!file_exists($backupsPath)) {
-                mkdir($backupsPath, 0755, true);
-            } else {
-                if (!is_writable($backupsPath)) {
-                    \WP_CLI::error("The backups directory is not writable. Please check the permissions.");
-                }
-            }
-
-            \WP_CLI::runcommand("db export $backupsPath/$backupFileName $skip_flag");
-
-            \WP_CLI::success("Database backup saved to $backupsPath/$backupFileName");
+            // Pull overwrites local — back up the local database.
+            \WpSync\Helpers::backupDatabase('local', '', $skip_flag, (int) $config['backup_count']);
             \WP_CLI::log('');
         }
 

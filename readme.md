@@ -59,7 +59,8 @@ pull:
   themes: false
   plugins: true
   uploads: false
-  db_backup: false
+  db_backup: true
+  backup_count: 2
   load_media_from_remote: true
 
 push:
@@ -68,15 +69,15 @@ push:
   plugins: true
   uploads: false
   db_backup: true
+  backup_count: 2
   load_media_from_remote: false
 
 environments:
   local:
-    url: http://local.example.com
+    # url: http://local.example.com (optional - wp cli will normally detect automatically)
 
   staging:
-    user: user
-    host: staging-server-ip
+    host: staging-alias-name
     path: /path/to/wordpress
     ssh: user@staging-server-ip/path/to/wordpress
     url: http://staging.example.com
@@ -113,8 +114,24 @@ This command is used in the same way as the pull command, but synchronizes **fro
 - `themes`: Synchronize themes. Default: false.
 - `plugins`: Synchronize plugins. Default: false.
 - `uploads`: Synchronize uploads. Default: false.
-- `db_backup`: Backup the database locally before synchronizing. Default: true.
+- `db_backup`: Back up the database that is about to be overwritten before synchronizing. See [Database Backups](#database-backups). Default: true.
+- `backup_count`: Number of backups to keep per environment. Older backups are pruned automatically. Default: 2.
 - `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: true.
+
+### Database Backups
+When `db_backup` is enabled, WP CLI Sync backs up the database that is **about to be overwritten**, so you can restore if a sync goes wrong:
+
+- **Pull** backs up your **local** database.
+- **Push** backs up the **remote** database.
+
+Backups are always stored **locally** in `wp-content/wp-sync-backups`, named `wp_sync_backup_<env>_<timestamp>.sql`. On push, the remote database is streamed over SSH and written locally — nothing is ever left on the remote server.
+
+For security, the backup directory is created with `0700` permissions and includes `.htaccess` / `index.php` files to block web access to the dumps.
+
+Only the newest `backup_count` backups are kept **per environment** (e.g. 2 `local` and 2 `staging`); older ones are pruned after each backup. Restore a backup with `wp db import`:
+```bash
+wp db import wp-content/wp-sync-backups/wp_sync_backup_local_20260721_143000.sql
+```
 
 ## Custom Command Hooks
 
