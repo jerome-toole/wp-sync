@@ -14,21 +14,49 @@ class Pull
     }
 
     /**
-     * Pull Command
+     * Pull database and/or files from a remote environment to local.
+     *
+     * Any option below can also be set in wp-sync.yml (under `pull` or a specific
+     * environment). CLI flags take precedence over the config file.
      *
      * <env>
-     * : The environment to sync from.
+     * : The environment to pull from (as defined in wp-sync.yml).
+     *
+     * [--db=<true|false>]
+     * : Sync the database (replaces the local database). Default: false.
+     *
+     * [--themes=<true|false>]
+     * : Sync themes (replaces local theme files). Default: false.
+     *
+     * [--plugins=<true|false>]
+     * : Sync plugins (replaces local plugin files). Default: false.
+     *
+     * [--uploads=<true|false>]
+     * : Sync uploads (replaces local upload files). Default: false.
      *
      * [--db_backup=<true|false>]
-     * : Whether to backup the local database before syncing.
+     * : Back up the local database before syncing. Default: true.
      *
      * [--db_backup_count=<number>]
-     * : Number of backups to keep per environment. Older ones are pruned. Default 3.
+     * : Number of backups to keep per environment. Older ones are pruned. Default: 3.
+     *
+     * [--load_media_from_remote=<true|false>]
+     * : Load media from the remote environment (via be-media-from-production)
+     *   instead of syncing uploads. Default: true.
      *
      * [--verbose]
      * : Show detailed search-replace output tables.
-     * TODO Document all options
      *
+     * [--yes]
+     * : Skip the confirmation prompt and run non-interactively.
+     *
+     * ## EXAMPLES
+     *
+     *     # Pull the database and uploads from production
+     *     $ wp sync pull production --db=true --uploads=true
+     *
+     *     # Non-interactive pull for use in a setup script
+     *     $ wp sync pull production --yes
      *
      * @when after_wp_load
      */
@@ -147,7 +175,8 @@ class Pull
             "local_domain:  $local_domain\n" .
             "remote_domain: $remote_domain\n\n" .
             (!empty($warnings) ? \WP_CLI::colorize("%Y⚠️  This will overwrite your LOCAL environment%n\n") . implode("\n", $warnings) . "\n\n" : "") .
-            \WP_CLI::colorize("Continue with pull from %Y'$env'%n to %G'local'%n?")
+            \WP_CLI::colorize("Continue with pull from %Y'$env'%n to %G'local'%n?"),
+            $assoc_args
         );
 
         // Run before_pull commands

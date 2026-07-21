@@ -150,6 +150,7 @@ This command is used in the same way as the pull command, but synchronizes **fro
 - `db_backup`: Back up the database that is about to be overwritten before synchronizing. See [Database Backups](#database-backups). Default: true.
 - `db_backup_count`: Number of backups to keep per environment. Older backups are pruned automatically. Default: 3.
 - `load_media_from_remote`: Load media from the remote environment when synchronizing the database (using [be-media-from-production](https://github.com/billerickson/BE-Media-from-Production)). Default: true.
+- `yes`: Skip the confirmation prompt and run non-interactively. Useful for scripting, e.g. `wp sync pull production --yes && composer install && npm run build`. Default: false.
 
 ### Database Backups
 When `db_backup` is enabled, WP CLI Sync backs up the database that is **about to be overwritten**, so you can restore if a sync goes wrong:

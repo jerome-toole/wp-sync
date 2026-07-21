@@ -14,21 +14,49 @@ class Push
     }
 
     /**
-     * Push Command
+     * Push database and/or files from local to a remote environment.
+     *
+     * Any option below can also be set in wp-sync.yml (under `push` or a specific
+     * environment). CLI flags take precedence over the config file.
      *
      * <env>
-     * : The environment to sync from.
+     * : The environment to push to (as defined in wp-sync.yml).
+     *
+     * [--db=<true|false>]
+     * : Sync the database (replaces the remote database). Default: false.
+     *
+     * [--themes=<true|false>]
+     * : Sync themes (replaces remote theme files). Default: false.
+     *
+     * [--plugins=<true|false>]
+     * : Sync plugins (replaces remote plugin files). Default: false.
+     *
+     * [--uploads=<true|false>]
+     * : Sync uploads (replaces remote upload files). Default: false.
      *
      * [--db_backup=<true|false>]
-     * : Whether to backup the remote database (saved locally) before syncing.
+     * : Back up the remote database (saved locally) before syncing. Default: true.
      *
      * [--db_backup_count=<number>]
-     * : Number of backups to keep per environment. Older ones are pruned. Default 3.
+     * : Number of backups to keep per environment. Older ones are pruned. Default: 3.
+     *
+     * [--load_media_from_remote=<true|false>]
+     * : Load media from the remote environment (via be-media-from-production)
+     *   instead of syncing uploads. Default: true.
      *
      * [--verbose]
      * : Show detailed search-replace output tables.
-     * TODO Document all options
      *
+     * [--yes]
+     * : Skip the confirmation prompt and run non-interactively.
+     *
+     * ## EXAMPLES
+     *
+     *     # Push the database and uploads to staging
+     *     $ wp sync push staging --db=true --uploads=true
+     *
+     *     # Non-interactive push for use in a script
+     *     $ wp sync push staging --yes
      *
      * @when after_wp_load
      */
@@ -138,7 +166,8 @@ class Push
             "local_domain:  $local_domain\n" .
             "remote_domain: $remote_domain\n\n" .
             (!empty($warnings) ? \WP_CLI::colorize("%Y⚠️  This will overwrite your REMOTE '$env' environment%n\n") . implode("\n", $warnings) . "\n\n" : "") .
-            \WP_CLI::colorize("Continue with push from %G'local'%n to %Y'$env'%n?")
+            \WP_CLI::colorize("Continue with push from %G'local'%n to %Y'$env'%n?"),
+            $assoc_args
         );
 
         // Run before_push commands

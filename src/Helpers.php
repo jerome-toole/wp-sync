@@ -56,10 +56,10 @@ class Helpers
         }
 
         // Handle CLI flags
-        // Move any $assoc_args that start with pull-- to the action array
+        // Move any $assoc_args that start with e.g. pull-- to the command config
         foreach ($assoc_args as $key => $value) {
-            if (strpos($key, "$action--") === 0) {
-                $new_key = str_replace("$action--", '', $key);
+            if (strpos($key, "$command--") === 0) {
+                $new_key = str_replace("$command--", '', $key);
                 $config[$new_key] = $value;
                 unset($assoc_args[$key]);
             }
